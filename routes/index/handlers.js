@@ -1,5 +1,5 @@
 function indexHandler(req, res) {
-    res.render('index', { title: 'Express' });
+    res.render('index');
 }
 
 module.exports = {
