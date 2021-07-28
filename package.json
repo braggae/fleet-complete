@@ -1,0 +1,36 @@
+{
+  "name": "fleet-complete",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www",
+    "start-dev": "nodemon ./bin/www",
+    "build": "mix",
+    "build-watch": "mix watch",
+    "build-prod": "mix --production"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "ejs": "~2.6.1",
+    "express": "~4.16.1",
+    "http-errors": "~1.6.3",
+    "morgan": "~1.9.1"
+  },
+  "devDependencies": {
+    "@popperjs/core": "^2.9.2",
+    "bootstrap": "^5.0.2",
+    "cross-env": "^7.0.3",
+    "css-loader": "^5.2.6",
+    "laravel-mix": "^6.0.25",
+    "node-sass": "^6.0.1",
+    "nodemon": "^2.0.12",
+    "resolve-url-loader": "^4.0.0",
+    "sass": "^1.35.1",
+    "sass-loader": "^12.1.0",
+    "style-loader": "^3.0.0",
+    "vue-loader": "^15.9.7",
+    "vue-template-compiler": "^2.6.14",
+    "webpack": "^5.40.0"
+  }
+}
