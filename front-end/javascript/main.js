@@ -1,10 +1,8 @@
 import Vue from 'vue';
 import 'bootstrap';
 
-import apiTokenForm from './components/api-token-form'
-
-Vue.component('api-token-form', apiTokenForm);
+import App from './App';
 
 new Vue({
-            el: '#app',
-        });
+            render: h => h(App)
+        }).$mount('#app')
