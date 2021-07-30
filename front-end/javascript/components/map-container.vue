@@ -1,9 +1,15 @@
 <template>
   <gmaps-map id="map" v-bind:options="mapOptions">
     <gmaps-marker
-        v-for="vehicle in vehicleList"
+        v-for="vehicle in vehicles"
         :key="vehicle.objectId"
-        :position="{ lat: vehicle.latitude, lng: vehicle.longitude }"/>
+        :position="{ lat: vehicle.latitude, lng: vehicle.longitude }"
+    />
+    <gmaps-marker
+        v-for="(stop, i) in listOfStops"
+        :key="i"
+        :position="stop"
+    />
     <gmaps-polyline :path="vehiclePath" />
   </gmaps-map>
 </template>
@@ -23,7 +29,8 @@ export default {
     gmapsPolyline,
   },
   props: {
-    vehicleList: Array,
+    vehicleList: { type: Array, default: [], },
+    listOfStops: { type: Array, default: [], },
     activeVehicle: Object,
     vehiclePath: { type: Array, default: [], }
   },
@@ -34,6 +41,7 @@ export default {
         zoom: INITIAL_ZOOM,
         disableDefaultUI: true,
       },
+      vehicles: this.vehicleList,
     }
   },
   watch: {
@@ -41,6 +49,12 @@ export default {
       this.mapOptions.center = this.getMapCenter(newVal);
       this.mapOptions.zoom = SELECTED_VEHICLE_ZOOM;
     },
+    listOfStops: function (newVal) {
+      if (!newVal.length) return;
+
+      this.vehicles = [];
+      this.mapOptions.zoom = INITIAL_ZOOM;
+    }
   },
   methods: {
     getMapCenter(vehicle = {}) {

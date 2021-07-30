@@ -14,7 +14,7 @@
             id="selected-date"
             name="selected-date"
             v-model="date"
-            placeholder="(api key goes here)"
+            :max="new Date()"
             v-bind:class="{ 'is-invalid': isInvalid }"
             required
         >
@@ -79,6 +79,10 @@ export default {
           break;
         case 401:
           this.error     = 'Invalid API token';
+          this.isInvalid = true;
+          break;
+        case 408:
+          this.error     = 'Request Timeout';
           this.isInvalid = true;
           break;
         default:

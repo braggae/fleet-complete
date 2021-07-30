@@ -45,9 +45,9 @@ function mapLastDataResponse(data) {
 }
 
 function mapRawDataResponse(data) {
-    const mapped = [];
+    const mapped           = [];
     let calculatedDistance = 0;
-    for (let item of data.response) {
+    data.response.forEach((item, index, arr) => {
         if (item.DeltaDistance) {
             calculatedDistance += item.DeltaDistance;
         }
@@ -58,8 +58,9 @@ function mapRawDataResponse(data) {
                         longitude: item.Longitude,
                         distance: item.Distance ?? calculatedDistance,
                         direction: parseFloat(item.Direction),
+                        isStop: item.EngineStatus === null && arr[index - 1]?.EngineStatus === '1',
                     });
-    }
+    });
     return mapped;
 }
 

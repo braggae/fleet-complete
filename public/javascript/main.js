@@ -5018,6 +5018,11 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
 
 
 
@@ -5038,7 +5043,8 @@ __webpack_require__.r(__webpack_exports__);
       activeVehicle: {},
       apiToken: null,
       vehiclePath: [],
-      totalDistance: 0
+      totalDistance: 0,
+      listOfStops: []
     };
   },
   methods: {
@@ -5047,22 +5053,34 @@ __webpack_require__.r(__webpack_exports__);
       this.apiToken = apiToken;
     },
     onVehicleSelected: function onVehicleSelected(vehicle) {
+      this.resetMapData();
       this.activeVehicle = vehicle;
-      this.vehiclePath = [];
-      this.totalDistance = 0;
     },
     onVehicleRouteUpdate: function onVehicleRouteUpdate(data) {
       var _data,
           _data$,
           _this = this;
 
+      this.resetMapData();
       this.totalDistance = ((_data = data[data.length - 1]) === null || _data === void 0 ? void 0 : _data.distance) - ((_data$ = data[0]) === null || _data$ === void 0 ? void 0 : _data$.distance);
       data.forEach(function (item) {
         _this.vehiclePath.push({
           lat: item.latitude,
           lng: item.longitude
         });
+
+        if (item.isStop) {
+          _this.listOfStops.push({
+            lat: item.latitude,
+            lng: item.longitude
+          });
+        }
       });
+    },
+    resetMapData: function resetMapData() {
+      this.vehiclePath = [];
+      this.totalDistance = 0;
+      this.listOfStops = [];
     }
   }
 });
@@ -5347,24 +5365,29 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
               case 17:
                 _this.isLoading = false;
                 _context.t1 = res.status;
-                _context.next = _context.t1 === 200 ? 21 : _context.t1 === 401 ? 23 : 26;
+                _context.next = _context.t1 === 200 ? 21 : _context.t1 === 401 ? 23 : _context.t1 === 408 ? 26 : 29;
                 break;
 
               case 21:
                 _this.$emit('vehicle-route-update', res.data);
 
-                return _context.abrupt("break", 28);
+                return _context.abrupt("break", 31);
 
               case 23:
                 _this.error = 'Invalid API token';
                 _this.isInvalid = true;
-                return _context.abrupt("break", 28);
+                return _context.abrupt("break", 31);
 
               case 26:
+                _this.error = 'Request Timeout';
+                _this.isInvalid = true;
+                return _context.abrupt("break", 31);
+
+              case 29:
                 _this.error = 'Unknown error';
                 _this.isInvalid = true;
 
-              case 28:
+              case 31:
               case "end":
                 return _context.stop();
             }
@@ -5431,10 +5454,15 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   name: "details-table",
   props: {
-    totalDistance: 0
+    totalDistance: 0,
+    numberOfStops: 0
   },
   methods: {
     formatDistance: function formatDistance(distance) {
@@ -5467,6 +5495,12 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
+//
 
 var DEFAULT_CENTER = {
   lat: 58.406288,
@@ -5482,7 +5516,14 @@ var SELECTED_VEHICLE_ZOOM = 18;
     gmapsPolyline: x5_gmaps__WEBPACK_IMPORTED_MODULE_0__.gmapsPolyline
   },
   props: {
-    vehicleList: Array,
+    vehicleList: {
+      type: Array,
+      "default": []
+    },
+    listOfStops: {
+      type: Array,
+      "default": []
+    },
     activeVehicle: Object,
     vehiclePath: {
       type: Array,
@@ -5495,13 +5536,19 @@ var SELECTED_VEHICLE_ZOOM = 18;
         center: this.getMapCenter(this.activeVehicle),
         zoom: INITIAL_ZOOM,
         disableDefaultUI: true
-      }
+      },
+      vehicles: this.vehicleList
     };
   },
   watch: {
     activeVehicle: function activeVehicle(newVal, oldVal) {
       this.mapOptions.center = this.getMapCenter(newVal);
       this.mapOptions.zoom = SELECTED_VEHICLE_ZOOM;
+    },
+    listOfStops: function listOfStops(newVal) {
+      if (!newVal.length) return;
+      this.vehicles = [];
+      this.mapOptions.zoom = INITIAL_ZOOM;
     }
   },
   methods: {
@@ -13039,9 +13086,12 @@ var render = function() {
               on: { "vehicle-route-update": _vm.onVehicleRouteUpdate }
             }),
             _vm._v(" "),
-            _vm.totalDistance
+            _vm.vehiclePath.length
               ? _c("details-table", {
-                  attrs: { "total-distance": _vm.totalDistance }
+                  attrs: {
+                    "total-distance": _vm.totalDistance,
+                    "number-of-stops": _vm.listOfStops.length
+                  }
                 })
               : _vm._e()
           ],
@@ -13056,7 +13106,8 @@ var render = function() {
               attrs: {
                 "vehicle-list": _vm.vehicleLatestData,
                 "active-vehicle": _vm.activeVehicle,
-                "vehicle-path": _vm.vehiclePath
+                "vehicle-path": _vm.vehiclePath,
+                "list-of-stops": _vm.listOfStops
               }
             })
           ],
@@ -13219,7 +13270,7 @@ var render = function() {
                     type: "date",
                     id: "selected-date",
                     name: "selected-date",
-                    placeholder: "(api key goes here)",
+                    max: new Date(),
                     required: ""
                   },
                   domProps: { value: _vm.date },
@@ -13282,6 +13333,12 @@ var render = function() {
           _c("th", [_vm._v("Total distance")]),
           _vm._v(" "),
           _c("td", [_vm._v(_vm._s(_vm.formatDistance(_vm.totalDistance)))])
+        ]),
+        _vm._v(" "),
+        _c("tr", [
+          _c("th", [_vm._v("Number of stops")]),
+          _vm._v(" "),
+          _c("td", [_vm._v(_vm._s(_vm.numberOfStops))])
         ])
       ])
     ]
@@ -13314,11 +13371,15 @@ var render = function() {
     "gmaps-map",
     { attrs: { id: "map", options: _vm.mapOptions } },
     [
-      _vm._l(_vm.vehicleList, function(vehicle) {
+      _vm._l(_vm.vehicles, function(vehicle) {
         return _c("gmaps-marker", {
           key: vehicle.objectId,
           attrs: { position: { lat: vehicle.latitude, lng: vehicle.longitude } }
         })
+      }),
+      _vm._v(" "),
+      _vm._l(_vm.listOfStops, function(stop, i) {
+        return _c("gmaps-marker", { key: i, attrs: { position: stop } })
       }),
       _vm._v(" "),
       _c("gmaps-polyline", { attrs: { path: _vm.vehiclePath } })

@@ -1,6 +1,11 @@
-const { BadRequest, Unauthorized, InternalServerError } = require('http-errors');
-const { ApiClient }                                     = require('../../api-client');
-const { calculateEndDate }                              = require('./helpers');
+const {
+          BadRequest,
+          Unauthorized,
+          InternalServerError,
+          RequestTimeout,
+      }                    = require('http-errors');
+const { ApiClient }        = require('../../api-client');
+const { calculateEndDate } = require('./helpers');
 
 async function vehiclesRouteDataHandler(req, res) {
     const apiToken = req.headers['x-api-token'];
@@ -26,6 +31,9 @@ async function vehiclesRouteDataHandler(req, res) {
         switch (err.name) {
             case 'UnauthorizedException':
                 res.status(401).send((new Unauthorized()));
+                break;
+            case 'TimeoutException':
+                res.status(408).send((new RequestTimeout()));
                 break;
             default:
                 res.status(500).send((new InternalServerError()));

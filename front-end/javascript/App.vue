@@ -5,21 +5,26 @@
     <div class="row">
       <div class="col gap-3">
         <vehicle-table
-            v-bind:data="vehicleLatestData"
+            :data="vehicleLatestData"
             v-on:vehicle-selected="onVehicleSelected"
         ></vehicle-table>
         <date-selection-form
-            v-bind:api-token="apiToken"
-            v-bind:active-vehicle="activeVehicle"
+            :api-token="apiToken"
+            :active-vehicle="activeVehicle"
             v-on:vehicle-route-update="onVehicleRouteUpdate"
         ></date-selection-form>
-        <details-table v-if="totalDistance" :total-distance="totalDistance"></details-table>
+        <details-table
+            v-if="vehiclePath.length"
+            :total-distance="totalDistance"
+            :number-of-stops="listOfStops.length"
+        ></details-table>
       </div>
       <div class="col">
         <map-container
-            v-bind:vehicle-list="vehicleLatestData"
-            v-bind:active-vehicle="activeVehicle"
-            v-bind:vehicle-path="vehiclePath"
+            :vehicle-list="vehicleLatestData"
+            :active-vehicle="activeVehicle"
+            :vehicle-path="vehiclePath"
+            :list-of-stops="listOfStops"
         ></map-container>
       </div>
     </div>
@@ -50,6 +55,7 @@ export default {
       apiToken: null,
       vehiclePath: [],
       totalDistance: 0,
+      listOfStops: [],
     }
   },
   methods: {
@@ -58,16 +64,24 @@ export default {
       this.apiToken          = apiToken;
     },
     onVehicleSelected(vehicle) {
+      this.resetMapData();
       this.activeVehicle = vehicle;
-      this.vehiclePath = [];
-      this.totalDistance = 0;
     },
     onVehicleRouteUpdate(data) {
+      this.resetMapData();
       this.totalDistance = data[data.length - 1]?.distance - data[0]?.distance;
       data.forEach(item => {
         this.vehiclePath.push({ lat: item.latitude, lng: item.longitude });
+        if (item.isStop) {
+          this.listOfStops.push({ lat: item.latitude, lng: item.longitude });
+        }
       });
     },
+    resetMapData() {
+      this.vehiclePath = [];
+      this.totalDistance = 0;
+      this.listOfStops = [];
+    }
   },
 }
 </script>

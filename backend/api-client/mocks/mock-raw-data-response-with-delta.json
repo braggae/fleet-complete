@@ -519,7 +519,7 @@
       "timestamp": "2021-07-29 07:28:50+0300",
       "DeltaDistance": 0.021,
       "Power": 28.829,
-      "EngineStatus": "1",
+      "EngineStatus": null,
       "Speed": "37",
       "Direction": "272.8",
       "Longitude": 26.739778,

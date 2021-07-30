@@ -19,7 +19,7 @@ class ApiClient {
 
         this.httpClient = axios.create({
                                            baseURL: options.baseUrl,
-                                           timeout: 2000,
+                                           timeout: 3000,
                                        });
         this.apiToken   = options.apiToken;
     }
@@ -68,6 +68,9 @@ class ApiClient {
                                  .get(`/Api/Vehicles/getRawData?` + queryParams.join('&'),
                                  );
         } catch (err) {
+            if (err.code === 'ECONNABORTED') {
+                throw new VError({ name: 'TimeoutException' })
+            }
             switch (err.response.status) {
                 case 403:
                     throw new VError({ name: 'UnauthorizedException' })

@@ -36,6 +36,7 @@ describe('mapRawDataResponse()', function () {
             longitude: 26.738573,
             distance: 119014.623,
             direction: 272.8,
+            isStop: false,
         });
     });
 
@@ -50,6 +51,7 @@ describe('mapRawDataResponse()', function () {
             longitude: 26.739778,
             distance: 1.1379999999999997,
             direction: 272.8,
+            isStop: true,
         });
     });
 })
