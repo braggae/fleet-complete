@@ -2,17 +2,18 @@
   <form
       @submit.prevent="onSubmit"
       class="row g-3"
-      id="api-key-form"
+      id="date-selection-form"
+      v-if="canDisplayForm()"
       novalidate
   >
     <div class="input-group has-validation">
-      <label for="api-key" class="input-group-text">API key:</label>
+      <label for="selected-date" class="input-group-text">Date:</label>
       <input
-          type="text"
+          type="date"
           class="form-control"
-          id="api-key"
-          name="api-key"
-          v-model="token"
+          id="selected-date"
+          name="selected-date"
+          v-model="date"
           placeholder="(api key goes here)"
           v-bind:class="{ 'is-invalid': isInvalid }"
           required
@@ -23,33 +24,40 @@
       </div>
     </div>
   </form>
+  <div
+      v-else
+      class="alert alert-secondary"
+      role="alert">
+    Please select a vehicle to see more data.
+  </div>
 </template>
 
 <script>
+import axios from 'axios';
+
 export default {
-  name: "api-token-form",
+  name: "date-selection-form",
+  props: {
+    apiToken: String,
+    activeVehicle: Object,
+  },
   data() {
     return {
-      token: null,
+      date: null,
       error: null,
       isInvalid: false,
-    }
+    };
   },
   methods: {
     async onSubmit() {
       this.isInvalid = false;
       this.error     = null;
 
-      if (!this.token) {
-        this.error     = 'Please fill in the API token';
-        this.isInvalid = true;
-        return;
-      }
-
-      const res         = await this.fetchData();
+      const res = await this.fetchData();
+      console.log(res);
       switch (res.status) {
         case 200:
-          this.$emit('vehicle-list-update', await res.json(), this.token);
+          this.$emit('vehicle-list-update', await res.data);
           break;
         case 401:
           this.error     = 'Invalid API token';
@@ -60,11 +68,18 @@ export default {
           this.isInvalid = true;
       }
     },
+    canDisplayForm() {
+      return this.apiToken && this.activeVehicle?.objectId;
+    },
     async fetchData() {
-      return fetch('vehicles', {
+      return axios.get('vehicle-route-data', {
+        params: {
+          date: this.date,
+          objectId: this.activeVehicle.objectId,
+        },
         headers: {
           'Content-Type': 'application/json',
-          'x-api-token': this.token,
+          'x-api-token': this.apiToken,
         },
       });
     },
@@ -73,7 +88,5 @@ export default {
 </script>
 
 <style scoped>
-#api-key-form {
-  max-width: 500px;
-}
+
 </style>

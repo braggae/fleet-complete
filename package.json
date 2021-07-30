@@ -8,17 +8,20 @@
     "build": "mix",
     "build-watch": "mix watch",
     "build-prod": "mix --production",
-    "test": "mocha api-client/**/*.test.js routes/**/*.test.js --recursive"
+    "test": "mocha backend/**/*.test.js --recursive"
   },
   "dependencies": {
     "axios": "^0.21.1",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
+    "dotenv": "^10.0.0",
     "ejs": "~2.6.1",
     "express": "~4.16.1",
     "http-errors": "~1.6.3",
     "morgan": "~1.9.1",
-    "verror": "^1.10.0"
+    "verror": "^1.10.0",
+    "vue-class-component": "^7.2.6",
+    "x5-gmaps": "^0.5.6"
   },
   "devDependencies": {
     "@popperjs/core": "^2.9.2",

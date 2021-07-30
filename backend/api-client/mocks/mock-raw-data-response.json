@@ -1,0 +1,70 @@
+{
+  "status": 0,
+  "meta": {},
+  "response": [
+    {
+      "timestamp": "2019-09-30 00:29:17+0300",
+      "ServerGenerated": null,
+      "Din1": null,
+      "SplitSegment": null,
+      "EventType_dec": "7",
+      "Distance": 119014.623,
+      "Power": 25.546,
+      "EngineStatus": null,
+      "Direction": 272.8,
+      "Longitude": 26.738573,
+      "Latitude": 58.35176,
+      "GPSState": "1",
+      "DriverId": null,
+      "Speed": null
+    },
+    {
+      "timestamp": "2019-09-30 01:29:17+0300",
+      "ServerGenerated": null,
+      "Din1": null,
+      "SplitSegment": null,
+      "EventType_dec": "7",
+      "Distance": 119014.623,
+      "Power": 25.543,
+      "EngineStatus": null,
+      "Direction": 272.8,
+      "Longitude": 26.738573,
+      "Latitude": 58.35176,
+      "GPSState": "1",
+      "DriverId": null,
+      "Speed": null
+    },
+    {
+      "timestamp": "2019-09-30 02:29:17+0300",
+      "ServerGenerated": null,
+      "Din1": null,
+      "SplitSegment": null,
+      "EventType_dec": "7",
+      "Distance": 119014.623,
+      "Power": 25.543,
+      "EngineStatus": null,
+      "Direction": 272.8,
+      "Longitude": 26.738573,
+      "Latitude": 58.35176,
+      "GPSState": "1",
+      "DriverId": null,
+      "Speed": null
+    },
+    {
+      "timestamp": "2019-09-30 03:29:17+0300",
+      "ServerGenerated": null,
+      "Din1": null,
+      "SplitSegment": null,
+      "EventType_dec": "7",
+      "Distance": 119014.623,
+      "Power": 25.531,
+      "EngineStatus": null,
+      "Direction": 272.8,
+      "Longitude": 26.738573,
+      "Latitude": 58.35176,
+      "GPSState": "1",
+      "DriverId": null,
+      "Speed": null
+    }
+  ]
+}

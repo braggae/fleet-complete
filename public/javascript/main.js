@@ -3116,6 +3116,1839 @@ function within(min, value, max) {
 
 /***/ }),
 
+/***/ "./node_modules/axios/index.js":
+/*!*************************************!*\
+  !*** ./node_modules/axios/index.js ***!
+  \*************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+module.exports = __webpack_require__(/*! ./lib/axios */ "./node_modules/axios/lib/axios.js");
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/adapters/xhr.js":
+/*!************************************************!*\
+  !*** ./node_modules/axios/lib/adapters/xhr.js ***!
+  \************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+var settle = __webpack_require__(/*! ./../core/settle */ "./node_modules/axios/lib/core/settle.js");
+var cookies = __webpack_require__(/*! ./../helpers/cookies */ "./node_modules/axios/lib/helpers/cookies.js");
+var buildURL = __webpack_require__(/*! ./../helpers/buildURL */ "./node_modules/axios/lib/helpers/buildURL.js");
+var buildFullPath = __webpack_require__(/*! ../core/buildFullPath */ "./node_modules/axios/lib/core/buildFullPath.js");
+var parseHeaders = __webpack_require__(/*! ./../helpers/parseHeaders */ "./node_modules/axios/lib/helpers/parseHeaders.js");
+var isURLSameOrigin = __webpack_require__(/*! ./../helpers/isURLSameOrigin */ "./node_modules/axios/lib/helpers/isURLSameOrigin.js");
+var createError = __webpack_require__(/*! ../core/createError */ "./node_modules/axios/lib/core/createError.js");
+
+module.exports = function xhrAdapter(config) {
+  return new Promise(function dispatchXhrRequest(resolve, reject) {
+    var requestData = config.data;
+    var requestHeaders = config.headers;
+
+    if (utils.isFormData(requestData)) {
+      delete requestHeaders['Content-Type']; // Let the browser set it
+    }
+
+    var request = new XMLHttpRequest();
+
+    // HTTP basic authentication
+    if (config.auth) {
+      var username = config.auth.username || '';
+      var password = config.auth.password ? unescape(encodeURIComponent(config.auth.password)) : '';
+      requestHeaders.Authorization = 'Basic ' + btoa(username + ':' + password);
+    }
+
+    var fullPath = buildFullPath(config.baseURL, config.url);
+    request.open(config.method.toUpperCase(), buildURL(fullPath, config.params, config.paramsSerializer), true);
+
+    // Set the request timeout in MS
+    request.timeout = config.timeout;
+
+    // Listen for ready state
+    request.onreadystatechange = function handleLoad() {
+      if (!request || request.readyState !== 4) {
+        return;
+      }
+
+      // The request errored out and we didn't get a response, this will be
+      // handled by onerror instead
+      // With one exception: request that using file: protocol, most browsers
+      // will return status as 0 even though it's a successful request
+      if (request.status === 0 && !(request.responseURL && request.responseURL.indexOf('file:') === 0)) {
+        return;
+      }
+
+      // Prepare the response
+      var responseHeaders = 'getAllResponseHeaders' in request ? parseHeaders(request.getAllResponseHeaders()) : null;
+      var responseData = !config.responseType || config.responseType === 'text' ? request.responseText : request.response;
+      var response = {
+        data: responseData,
+        status: request.status,
+        statusText: request.statusText,
+        headers: responseHeaders,
+        config: config,
+        request: request
+      };
+
+      settle(resolve, reject, response);
+
+      // Clean up request
+      request = null;
+    };
+
+    // Handle browser request cancellation (as opposed to a manual cancellation)
+    request.onabort = function handleAbort() {
+      if (!request) {
+        return;
+      }
+
+      reject(createError('Request aborted', config, 'ECONNABORTED', request));
+
+      // Clean up request
+      request = null;
+    };
+
+    // Handle low level network errors
+    request.onerror = function handleError() {
+      // Real errors are hidden from us by the browser
+      // onerror should only fire if it's a network error
+      reject(createError('Network Error', config, null, request));
+
+      // Clean up request
+      request = null;
+    };
+
+    // Handle timeout
+    request.ontimeout = function handleTimeout() {
+      var timeoutErrorMessage = 'timeout of ' + config.timeout + 'ms exceeded';
+      if (config.timeoutErrorMessage) {
+        timeoutErrorMessage = config.timeoutErrorMessage;
+      }
+      reject(createError(timeoutErrorMessage, config, 'ECONNABORTED',
+        request));
+
+      // Clean up request
+      request = null;
+    };
+
+    // Add xsrf header
+    // This is only done if running in a standard browser environment.
+    // Specifically not if we're in a web worker, or react-native.
+    if (utils.isStandardBrowserEnv()) {
+      // Add xsrf header
+      var xsrfValue = (config.withCredentials || isURLSameOrigin(fullPath)) && config.xsrfCookieName ?
+        cookies.read(config.xsrfCookieName) :
+        undefined;
+
+      if (xsrfValue) {
+        requestHeaders[config.xsrfHeaderName] = xsrfValue;
+      }
+    }
+
+    // Add headers to the request
+    if ('setRequestHeader' in request) {
+      utils.forEach(requestHeaders, function setRequestHeader(val, key) {
+        if (typeof requestData === 'undefined' && key.toLowerCase() === 'content-type') {
+          // Remove Content-Type if data is undefined
+          delete requestHeaders[key];
+        } else {
+          // Otherwise add header to the request
+          request.setRequestHeader(key, val);
+        }
+      });
+    }
+
+    // Add withCredentials to request if needed
+    if (!utils.isUndefined(config.withCredentials)) {
+      request.withCredentials = !!config.withCredentials;
+    }
+
+    // Add responseType to request if needed
+    if (config.responseType) {
+      try {
+        request.responseType = config.responseType;
+      } catch (e) {
+        // Expected DOMException thrown by browsers not compatible XMLHttpRequest Level 2.
+        // But, this can be suppressed for 'json' type as it can be parsed by default 'transformResponse' function.
+        if (config.responseType !== 'json') {
+          throw e;
+        }
+      }
+    }
+
+    // Handle progress if needed
+    if (typeof config.onDownloadProgress === 'function') {
+      request.addEventListener('progress', config.onDownloadProgress);
+    }
+
+    // Not all browsers support upload events
+    if (typeof config.onUploadProgress === 'function' && request.upload) {
+      request.upload.addEventListener('progress', config.onUploadProgress);
+    }
+
+    if (config.cancelToken) {
+      // Handle cancellation
+      config.cancelToken.promise.then(function onCanceled(cancel) {
+        if (!request) {
+          return;
+        }
+
+        request.abort();
+        reject(cancel);
+        // Clean up request
+        request = null;
+      });
+    }
+
+    if (!requestData) {
+      requestData = null;
+    }
+
+    // Send the request
+    request.send(requestData);
+  });
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/axios.js":
+/*!*****************************************!*\
+  !*** ./node_modules/axios/lib/axios.js ***!
+  \*****************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./utils */ "./node_modules/axios/lib/utils.js");
+var bind = __webpack_require__(/*! ./helpers/bind */ "./node_modules/axios/lib/helpers/bind.js");
+var Axios = __webpack_require__(/*! ./core/Axios */ "./node_modules/axios/lib/core/Axios.js");
+var mergeConfig = __webpack_require__(/*! ./core/mergeConfig */ "./node_modules/axios/lib/core/mergeConfig.js");
+var defaults = __webpack_require__(/*! ./defaults */ "./node_modules/axios/lib/defaults.js");
+
+/**
+ * Create an instance of Axios
+ *
+ * @param {Object} defaultConfig The default config for the instance
+ * @return {Axios} A new instance of Axios
+ */
+function createInstance(defaultConfig) {
+  var context = new Axios(defaultConfig);
+  var instance = bind(Axios.prototype.request, context);
+
+  // Copy axios.prototype to instance
+  utils.extend(instance, Axios.prototype, context);
+
+  // Copy context to instance
+  utils.extend(instance, context);
+
+  return instance;
+}
+
+// Create the default instance to be exported
+var axios = createInstance(defaults);
+
+// Expose Axios class to allow class inheritance
+axios.Axios = Axios;
+
+// Factory for creating new instances
+axios.create = function create(instanceConfig) {
+  return createInstance(mergeConfig(axios.defaults, instanceConfig));
+};
+
+// Expose Cancel & CancelToken
+axios.Cancel = __webpack_require__(/*! ./cancel/Cancel */ "./node_modules/axios/lib/cancel/Cancel.js");
+axios.CancelToken = __webpack_require__(/*! ./cancel/CancelToken */ "./node_modules/axios/lib/cancel/CancelToken.js");
+axios.isCancel = __webpack_require__(/*! ./cancel/isCancel */ "./node_modules/axios/lib/cancel/isCancel.js");
+
+// Expose all/spread
+axios.all = function all(promises) {
+  return Promise.all(promises);
+};
+axios.spread = __webpack_require__(/*! ./helpers/spread */ "./node_modules/axios/lib/helpers/spread.js");
+
+// Expose isAxiosError
+axios.isAxiosError = __webpack_require__(/*! ./helpers/isAxiosError */ "./node_modules/axios/lib/helpers/isAxiosError.js");
+
+module.exports = axios;
+
+// Allow use of default import syntax in TypeScript
+module.exports.default = axios;
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/cancel/Cancel.js":
+/*!*************************************************!*\
+  !*** ./node_modules/axios/lib/cancel/Cancel.js ***!
+  \*************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+/**
+ * A `Cancel` is an object that is thrown when an operation is canceled.
+ *
+ * @class
+ * @param {string=} message The message.
+ */
+function Cancel(message) {
+  this.message = message;
+}
+
+Cancel.prototype.toString = function toString() {
+  return 'Cancel' + (this.message ? ': ' + this.message : '');
+};
+
+Cancel.prototype.__CANCEL__ = true;
+
+module.exports = Cancel;
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/cancel/CancelToken.js":
+/*!******************************************************!*\
+  !*** ./node_modules/axios/lib/cancel/CancelToken.js ***!
+  \******************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var Cancel = __webpack_require__(/*! ./Cancel */ "./node_modules/axios/lib/cancel/Cancel.js");
+
+/**
+ * A `CancelToken` is an object that can be used to request cancellation of an operation.
+ *
+ * @class
+ * @param {Function} executor The executor function.
+ */
+function CancelToken(executor) {
+  if (typeof executor !== 'function') {
+    throw new TypeError('executor must be a function.');
+  }
+
+  var resolvePromise;
+  this.promise = new Promise(function promiseExecutor(resolve) {
+    resolvePromise = resolve;
+  });
+
+  var token = this;
+  executor(function cancel(message) {
+    if (token.reason) {
+      // Cancellation has already been requested
+      return;
+    }
+
+    token.reason = new Cancel(message);
+    resolvePromise(token.reason);
+  });
+}
+
+/**
+ * Throws a `Cancel` if cancellation has been requested.
+ */
+CancelToken.prototype.throwIfRequested = function throwIfRequested() {
+  if (this.reason) {
+    throw this.reason;
+  }
+};
+
+/**
+ * Returns an object that contains a new `CancelToken` and a function that, when called,
+ * cancels the `CancelToken`.
+ */
+CancelToken.source = function source() {
+  var cancel;
+  var token = new CancelToken(function executor(c) {
+    cancel = c;
+  });
+  return {
+    token: token,
+    cancel: cancel
+  };
+};
+
+module.exports = CancelToken;
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/cancel/isCancel.js":
+/*!***************************************************!*\
+  !*** ./node_modules/axios/lib/cancel/isCancel.js ***!
+  \***************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+module.exports = function isCancel(value) {
+  return !!(value && value.__CANCEL__);
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/Axios.js":
+/*!**********************************************!*\
+  !*** ./node_modules/axios/lib/core/Axios.js ***!
+  \**********************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+var buildURL = __webpack_require__(/*! ../helpers/buildURL */ "./node_modules/axios/lib/helpers/buildURL.js");
+var InterceptorManager = __webpack_require__(/*! ./InterceptorManager */ "./node_modules/axios/lib/core/InterceptorManager.js");
+var dispatchRequest = __webpack_require__(/*! ./dispatchRequest */ "./node_modules/axios/lib/core/dispatchRequest.js");
+var mergeConfig = __webpack_require__(/*! ./mergeConfig */ "./node_modules/axios/lib/core/mergeConfig.js");
+
+/**
+ * Create a new instance of Axios
+ *
+ * @param {Object} instanceConfig The default config for the instance
+ */
+function Axios(instanceConfig) {
+  this.defaults = instanceConfig;
+  this.interceptors = {
+    request: new InterceptorManager(),
+    response: new InterceptorManager()
+  };
+}
+
+/**
+ * Dispatch a request
+ *
+ * @param {Object} config The config specific for this request (merged with this.defaults)
+ */
+Axios.prototype.request = function request(config) {
+  /*eslint no-param-reassign:0*/
+  // Allow for axios('example/url'[, config]) a la fetch API
+  if (typeof config === 'string') {
+    config = arguments[1] || {};
+    config.url = arguments[0];
+  } else {
+    config = config || {};
+  }
+
+  config = mergeConfig(this.defaults, config);
+
+  // Set config.method
+  if (config.method) {
+    config.method = config.method.toLowerCase();
+  } else if (this.defaults.method) {
+    config.method = this.defaults.method.toLowerCase();
+  } else {
+    config.method = 'get';
+  }
+
+  // Hook up interceptors middleware
+  var chain = [dispatchRequest, undefined];
+  var promise = Promise.resolve(config);
+
+  this.interceptors.request.forEach(function unshiftRequestInterceptors(interceptor) {
+    chain.unshift(interceptor.fulfilled, interceptor.rejected);
+  });
+
+  this.interceptors.response.forEach(function pushResponseInterceptors(interceptor) {
+    chain.push(interceptor.fulfilled, interceptor.rejected);
+  });
+
+  while (chain.length) {
+    promise = promise.then(chain.shift(), chain.shift());
+  }
+
+  return promise;
+};
+
+Axios.prototype.getUri = function getUri(config) {
+  config = mergeConfig(this.defaults, config);
+  return buildURL(config.url, config.params, config.paramsSerializer).replace(/^\?/, '');
+};
+
+// Provide aliases for supported request methods
+utils.forEach(['delete', 'get', 'head', 'options'], function forEachMethodNoData(method) {
+  /*eslint func-names:0*/
+  Axios.prototype[method] = function(url, config) {
+    return this.request(mergeConfig(config || {}, {
+      method: method,
+      url: url,
+      data: (config || {}).data
+    }));
+  };
+});
+
+utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
+  /*eslint func-names:0*/
+  Axios.prototype[method] = function(url, data, config) {
+    return this.request(mergeConfig(config || {}, {
+      method: method,
+      url: url,
+      data: data
+    }));
+  };
+});
+
+module.exports = Axios;
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/InterceptorManager.js":
+/*!***********************************************************!*\
+  !*** ./node_modules/axios/lib/core/InterceptorManager.js ***!
+  \***********************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+
+function InterceptorManager() {
+  this.handlers = [];
+}
+
+/**
+ * Add a new interceptor to the stack
+ *
+ * @param {Function} fulfilled The function to handle `then` for a `Promise`
+ * @param {Function} rejected The function to handle `reject` for a `Promise`
+ *
+ * @return {Number} An ID used to remove interceptor later
+ */
+InterceptorManager.prototype.use = function use(fulfilled, rejected) {
+  this.handlers.push({
+    fulfilled: fulfilled,
+    rejected: rejected
+  });
+  return this.handlers.length - 1;
+};
+
+/**
+ * Remove an interceptor from the stack
+ *
+ * @param {Number} id The ID that was returned by `use`
+ */
+InterceptorManager.prototype.eject = function eject(id) {
+  if (this.handlers[id]) {
+    this.handlers[id] = null;
+  }
+};
+
+/**
+ * Iterate over all the registered interceptors
+ *
+ * This method is particularly useful for skipping over any
+ * interceptors that may have become `null` calling `eject`.
+ *
+ * @param {Function} fn The function to call for each interceptor
+ */
+InterceptorManager.prototype.forEach = function forEach(fn) {
+  utils.forEach(this.handlers, function forEachHandler(h) {
+    if (h !== null) {
+      fn(h);
+    }
+  });
+};
+
+module.exports = InterceptorManager;
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/buildFullPath.js":
+/*!******************************************************!*\
+  !*** ./node_modules/axios/lib/core/buildFullPath.js ***!
+  \******************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var isAbsoluteURL = __webpack_require__(/*! ../helpers/isAbsoluteURL */ "./node_modules/axios/lib/helpers/isAbsoluteURL.js");
+var combineURLs = __webpack_require__(/*! ../helpers/combineURLs */ "./node_modules/axios/lib/helpers/combineURLs.js");
+
+/**
+ * Creates a new URL by combining the baseURL with the requestedURL,
+ * only when the requestedURL is not already an absolute URL.
+ * If the requestURL is absolute, this function returns the requestedURL untouched.
+ *
+ * @param {string} baseURL The base URL
+ * @param {string} requestedURL Absolute or relative URL to combine
+ * @returns {string} The combined full path
+ */
+module.exports = function buildFullPath(baseURL, requestedURL) {
+  if (baseURL && !isAbsoluteURL(requestedURL)) {
+    return combineURLs(baseURL, requestedURL);
+  }
+  return requestedURL;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/createError.js":
+/*!****************************************************!*\
+  !*** ./node_modules/axios/lib/core/createError.js ***!
+  \****************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var enhanceError = __webpack_require__(/*! ./enhanceError */ "./node_modules/axios/lib/core/enhanceError.js");
+
+/**
+ * Create an Error with the specified message, config, error code, request and response.
+ *
+ * @param {string} message The error message.
+ * @param {Object} config The config.
+ * @param {string} [code] The error code (for example, 'ECONNABORTED').
+ * @param {Object} [request] The request.
+ * @param {Object} [response] The response.
+ * @returns {Error} The created error.
+ */
+module.exports = function createError(message, config, code, request, response) {
+  var error = new Error(message);
+  return enhanceError(error, config, code, request, response);
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/dispatchRequest.js":
+/*!********************************************************!*\
+  !*** ./node_modules/axios/lib/core/dispatchRequest.js ***!
+  \********************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+var transformData = __webpack_require__(/*! ./transformData */ "./node_modules/axios/lib/core/transformData.js");
+var isCancel = __webpack_require__(/*! ../cancel/isCancel */ "./node_modules/axios/lib/cancel/isCancel.js");
+var defaults = __webpack_require__(/*! ../defaults */ "./node_modules/axios/lib/defaults.js");
+
+/**
+ * Throws a `Cancel` if cancellation has been requested.
+ */
+function throwIfCancellationRequested(config) {
+  if (config.cancelToken) {
+    config.cancelToken.throwIfRequested();
+  }
+}
+
+/**
+ * Dispatch a request to the server using the configured adapter.
+ *
+ * @param {object} config The config that is to be used for the request
+ * @returns {Promise} The Promise to be fulfilled
+ */
+module.exports = function dispatchRequest(config) {
+  throwIfCancellationRequested(config);
+
+  // Ensure headers exist
+  config.headers = config.headers || {};
+
+  // Transform request data
+  config.data = transformData(
+    config.data,
+    config.headers,
+    config.transformRequest
+  );
+
+  // Flatten headers
+  config.headers = utils.merge(
+    config.headers.common || {},
+    config.headers[config.method] || {},
+    config.headers
+  );
+
+  utils.forEach(
+    ['delete', 'get', 'head', 'post', 'put', 'patch', 'common'],
+    function cleanHeaderConfig(method) {
+      delete config.headers[method];
+    }
+  );
+
+  var adapter = config.adapter || defaults.adapter;
+
+  return adapter(config).then(function onAdapterResolution(response) {
+    throwIfCancellationRequested(config);
+
+    // Transform response data
+    response.data = transformData(
+      response.data,
+      response.headers,
+      config.transformResponse
+    );
+
+    return response;
+  }, function onAdapterRejection(reason) {
+    if (!isCancel(reason)) {
+      throwIfCancellationRequested(config);
+
+      // Transform response data
+      if (reason && reason.response) {
+        reason.response.data = transformData(
+          reason.response.data,
+          reason.response.headers,
+          config.transformResponse
+        );
+      }
+    }
+
+    return Promise.reject(reason);
+  });
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/enhanceError.js":
+/*!*****************************************************!*\
+  !*** ./node_modules/axios/lib/core/enhanceError.js ***!
+  \*****************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+/**
+ * Update an Error with the specified config, error code, and response.
+ *
+ * @param {Error} error The error to update.
+ * @param {Object} config The config.
+ * @param {string} [code] The error code (for example, 'ECONNABORTED').
+ * @param {Object} [request] The request.
+ * @param {Object} [response] The response.
+ * @returns {Error} The error.
+ */
+module.exports = function enhanceError(error, config, code, request, response) {
+  error.config = config;
+  if (code) {
+    error.code = code;
+  }
+
+  error.request = request;
+  error.response = response;
+  error.isAxiosError = true;
+
+  error.toJSON = function toJSON() {
+    return {
+      // Standard
+      message: this.message,
+      name: this.name,
+      // Microsoft
+      description: this.description,
+      number: this.number,
+      // Mozilla
+      fileName: this.fileName,
+      lineNumber: this.lineNumber,
+      columnNumber: this.columnNumber,
+      stack: this.stack,
+      // Axios
+      config: this.config,
+      code: this.code
+    };
+  };
+  return error;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/mergeConfig.js":
+/*!****************************************************!*\
+  !*** ./node_modules/axios/lib/core/mergeConfig.js ***!
+  \****************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ../utils */ "./node_modules/axios/lib/utils.js");
+
+/**
+ * Config-specific merge-function which creates a new config-object
+ * by merging two configuration objects together.
+ *
+ * @param {Object} config1
+ * @param {Object} config2
+ * @returns {Object} New object resulting from merging config2 to config1
+ */
+module.exports = function mergeConfig(config1, config2) {
+  // eslint-disable-next-line no-param-reassign
+  config2 = config2 || {};
+  var config = {};
+
+  var valueFromConfig2Keys = ['url', 'method', 'data'];
+  var mergeDeepPropertiesKeys = ['headers', 'auth', 'proxy', 'params'];
+  var defaultToConfig2Keys = [
+    'baseURL', 'transformRequest', 'transformResponse', 'paramsSerializer',
+    'timeout', 'timeoutMessage', 'withCredentials', 'adapter', 'responseType', 'xsrfCookieName',
+    'xsrfHeaderName', 'onUploadProgress', 'onDownloadProgress', 'decompress',
+    'maxContentLength', 'maxBodyLength', 'maxRedirects', 'transport', 'httpAgent',
+    'httpsAgent', 'cancelToken', 'socketPath', 'responseEncoding'
+  ];
+  var directMergeKeys = ['validateStatus'];
+
+  function getMergedValue(target, source) {
+    if (utils.isPlainObject(target) && utils.isPlainObject(source)) {
+      return utils.merge(target, source);
+    } else if (utils.isPlainObject(source)) {
+      return utils.merge({}, source);
+    } else if (utils.isArray(source)) {
+      return source.slice();
+    }
+    return source;
+  }
+
+  function mergeDeepProperties(prop) {
+    if (!utils.isUndefined(config2[prop])) {
+      config[prop] = getMergedValue(config1[prop], config2[prop]);
+    } else if (!utils.isUndefined(config1[prop])) {
+      config[prop] = getMergedValue(undefined, config1[prop]);
+    }
+  }
+
+  utils.forEach(valueFromConfig2Keys, function valueFromConfig2(prop) {
+    if (!utils.isUndefined(config2[prop])) {
+      config[prop] = getMergedValue(undefined, config2[prop]);
+    }
+  });
+
+  utils.forEach(mergeDeepPropertiesKeys, mergeDeepProperties);
+
+  utils.forEach(defaultToConfig2Keys, function defaultToConfig2(prop) {
+    if (!utils.isUndefined(config2[prop])) {
+      config[prop] = getMergedValue(undefined, config2[prop]);
+    } else if (!utils.isUndefined(config1[prop])) {
+      config[prop] = getMergedValue(undefined, config1[prop]);
+    }
+  });
+
+  utils.forEach(directMergeKeys, function merge(prop) {
+    if (prop in config2) {
+      config[prop] = getMergedValue(config1[prop], config2[prop]);
+    } else if (prop in config1) {
+      config[prop] = getMergedValue(undefined, config1[prop]);
+    }
+  });
+
+  var axiosKeys = valueFromConfig2Keys
+    .concat(mergeDeepPropertiesKeys)
+    .concat(defaultToConfig2Keys)
+    .concat(directMergeKeys);
+
+  var otherKeys = Object
+    .keys(config1)
+    .concat(Object.keys(config2))
+    .filter(function filterAxiosKeys(key) {
+      return axiosKeys.indexOf(key) === -1;
+    });
+
+  utils.forEach(otherKeys, mergeDeepProperties);
+
+  return config;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/settle.js":
+/*!***********************************************!*\
+  !*** ./node_modules/axios/lib/core/settle.js ***!
+  \***********************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var createError = __webpack_require__(/*! ./createError */ "./node_modules/axios/lib/core/createError.js");
+
+/**
+ * Resolve or reject a Promise based on response status.
+ *
+ * @param {Function} resolve A function that resolves the promise.
+ * @param {Function} reject A function that rejects the promise.
+ * @param {object} response The response.
+ */
+module.exports = function settle(resolve, reject, response) {
+  var validateStatus = response.config.validateStatus;
+  if (!response.status || !validateStatus || validateStatus(response.status)) {
+    resolve(response);
+  } else {
+    reject(createError(
+      'Request failed with status code ' + response.status,
+      response.config,
+      null,
+      response.request,
+      response
+    ));
+  }
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/transformData.js":
+/*!******************************************************!*\
+  !*** ./node_modules/axios/lib/core/transformData.js ***!
+  \******************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+
+/**
+ * Transform the data for a request or a response
+ *
+ * @param {Object|String} data The data to be transformed
+ * @param {Array} headers The headers for the request or response
+ * @param {Array|Function} fns A single function or Array of functions
+ * @returns {*} The resulting transformed data
+ */
+module.exports = function transformData(data, headers, fns) {
+  /*eslint no-param-reassign:0*/
+  utils.forEach(fns, function transform(fn) {
+    data = fn(data, headers);
+  });
+
+  return data;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/defaults.js":
+/*!********************************************!*\
+  !*** ./node_modules/axios/lib/defaults.js ***!
+  \********************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+/* provided dependency */ var process = __webpack_require__(/*! process/browser */ "./node_modules/process/browser.js");
+
+
+var utils = __webpack_require__(/*! ./utils */ "./node_modules/axios/lib/utils.js");
+var normalizeHeaderName = __webpack_require__(/*! ./helpers/normalizeHeaderName */ "./node_modules/axios/lib/helpers/normalizeHeaderName.js");
+
+var DEFAULT_CONTENT_TYPE = {
+  'Content-Type': 'application/x-www-form-urlencoded'
+};
+
+function setContentTypeIfUnset(headers, value) {
+  if (!utils.isUndefined(headers) && utils.isUndefined(headers['Content-Type'])) {
+    headers['Content-Type'] = value;
+  }
+}
+
+function getDefaultAdapter() {
+  var adapter;
+  if (typeof XMLHttpRequest !== 'undefined') {
+    // For browsers use XHR adapter
+    adapter = __webpack_require__(/*! ./adapters/xhr */ "./node_modules/axios/lib/adapters/xhr.js");
+  } else if (typeof process !== 'undefined' && Object.prototype.toString.call(process) === '[object process]') {
+    // For node use HTTP adapter
+    adapter = __webpack_require__(/*! ./adapters/http */ "./node_modules/axios/lib/adapters/xhr.js");
+  }
+  return adapter;
+}
+
+var defaults = {
+  adapter: getDefaultAdapter(),
+
+  transformRequest: [function transformRequest(data, headers) {
+    normalizeHeaderName(headers, 'Accept');
+    normalizeHeaderName(headers, 'Content-Type');
+    if (utils.isFormData(data) ||
+      utils.isArrayBuffer(data) ||
+      utils.isBuffer(data) ||
+      utils.isStream(data) ||
+      utils.isFile(data) ||
+      utils.isBlob(data)
+    ) {
+      return data;
+    }
+    if (utils.isArrayBufferView(data)) {
+      return data.buffer;
+    }
+    if (utils.isURLSearchParams(data)) {
+      setContentTypeIfUnset(headers, 'application/x-www-form-urlencoded;charset=utf-8');
+      return data.toString();
+    }
+    if (utils.isObject(data)) {
+      setContentTypeIfUnset(headers, 'application/json;charset=utf-8');
+      return JSON.stringify(data);
+    }
+    return data;
+  }],
+
+  transformResponse: [function transformResponse(data) {
+    /*eslint no-param-reassign:0*/
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (e) { /* Ignore */ }
+    }
+    return data;
+  }],
+
+  /**
+   * A timeout in milliseconds to abort a request. If set to 0 (default) a
+   * timeout is not created.
+   */
+  timeout: 0,
+
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
+
+  maxContentLength: -1,
+  maxBodyLength: -1,
+
+  validateStatus: function validateStatus(status) {
+    return status >= 200 && status < 300;
+  }
+};
+
+defaults.headers = {
+  common: {
+    'Accept': 'application/json, text/plain, */*'
+  }
+};
+
+utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
+  defaults.headers[method] = {};
+});
+
+utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
+  defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
+});
+
+module.exports = defaults;
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/bind.js":
+/*!************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/bind.js ***!
+  \************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+module.exports = function bind(fn, thisArg) {
+  return function wrap() {
+    var args = new Array(arguments.length);
+    for (var i = 0; i < args.length; i++) {
+      args[i] = arguments[i];
+    }
+    return fn.apply(thisArg, args);
+  };
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/buildURL.js":
+/*!****************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/buildURL.js ***!
+  \****************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+
+function encode(val) {
+  return encodeURIComponent(val).
+    replace(/%3A/gi, ':').
+    replace(/%24/g, '$').
+    replace(/%2C/gi, ',').
+    replace(/%20/g, '+').
+    replace(/%5B/gi, '[').
+    replace(/%5D/gi, ']');
+}
+
+/**
+ * Build a URL by appending params to the end
+ *
+ * @param {string} url The base of the url (e.g., http://www.google.com)
+ * @param {object} [params] The params to be appended
+ * @returns {string} The formatted url
+ */
+module.exports = function buildURL(url, params, paramsSerializer) {
+  /*eslint no-param-reassign:0*/
+  if (!params) {
+    return url;
+  }
+
+  var serializedParams;
+  if (paramsSerializer) {
+    serializedParams = paramsSerializer(params);
+  } else if (utils.isURLSearchParams(params)) {
+    serializedParams = params.toString();
+  } else {
+    var parts = [];
+
+    utils.forEach(params, function serialize(val, key) {
+      if (val === null || typeof val === 'undefined') {
+        return;
+      }
+
+      if (utils.isArray(val)) {
+        key = key + '[]';
+      } else {
+        val = [val];
+      }
+
+      utils.forEach(val, function parseValue(v) {
+        if (utils.isDate(v)) {
+          v = v.toISOString();
+        } else if (utils.isObject(v)) {
+          v = JSON.stringify(v);
+        }
+        parts.push(encode(key) + '=' + encode(v));
+      });
+    });
+
+    serializedParams = parts.join('&');
+  }
+
+  if (serializedParams) {
+    var hashmarkIndex = url.indexOf('#');
+    if (hashmarkIndex !== -1) {
+      url = url.slice(0, hashmarkIndex);
+    }
+
+    url += (url.indexOf('?') === -1 ? '?' : '&') + serializedParams;
+  }
+
+  return url;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/combineURLs.js":
+/*!*******************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/combineURLs.js ***!
+  \*******************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+/**
+ * Creates a new URL by combining the specified URLs
+ *
+ * @param {string} baseURL The base URL
+ * @param {string} relativeURL The relative URL
+ * @returns {string} The combined URL
+ */
+module.exports = function combineURLs(baseURL, relativeURL) {
+  return relativeURL
+    ? baseURL.replace(/\/+$/, '') + '/' + relativeURL.replace(/^\/+/, '')
+    : baseURL;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/cookies.js":
+/*!***************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/cookies.js ***!
+  \***************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+
+module.exports = (
+  utils.isStandardBrowserEnv() ?
+
+  // Standard browser envs support document.cookie
+    (function standardBrowserEnv() {
+      return {
+        write: function write(name, value, expires, path, domain, secure) {
+          var cookie = [];
+          cookie.push(name + '=' + encodeURIComponent(value));
+
+          if (utils.isNumber(expires)) {
+            cookie.push('expires=' + new Date(expires).toGMTString());
+          }
+
+          if (utils.isString(path)) {
+            cookie.push('path=' + path);
+          }
+
+          if (utils.isString(domain)) {
+            cookie.push('domain=' + domain);
+          }
+
+          if (secure === true) {
+            cookie.push('secure');
+          }
+
+          document.cookie = cookie.join('; ');
+        },
+
+        read: function read(name) {
+          var match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
+          return (match ? decodeURIComponent(match[3]) : null);
+        },
+
+        remove: function remove(name) {
+          this.write(name, '', Date.now() - 86400000);
+        }
+      };
+    })() :
+
+  // Non standard browser env (web workers, react-native) lack needed support.
+    (function nonStandardBrowserEnv() {
+      return {
+        write: function write() {},
+        read: function read() { return null; },
+        remove: function remove() {}
+      };
+    })()
+);
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/isAbsoluteURL.js":
+/*!*********************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/isAbsoluteURL.js ***!
+  \*********************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+/**
+ * Determines whether the specified URL is absolute
+ *
+ * @param {string} url The URL to test
+ * @returns {boolean} True if the specified URL is absolute, otherwise false
+ */
+module.exports = function isAbsoluteURL(url) {
+  // A URL is considered absolute if it begins with "<scheme>://" or "//" (protocol-relative URL).
+  // RFC 3986 defines scheme name as a sequence of characters beginning with a letter and followed
+  // by any combination of letters, digits, plus, period, or hyphen.
+  return /^([a-z][a-z\d\+\-\.]*:)?\/\//i.test(url);
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/isAxiosError.js":
+/*!********************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/isAxiosError.js ***!
+  \********************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+/**
+ * Determines whether the payload is an error thrown by Axios
+ *
+ * @param {*} payload The value to test
+ * @returns {boolean} True if the payload is an error thrown by Axios, otherwise false
+ */
+module.exports = function isAxiosError(payload) {
+  return (typeof payload === 'object') && (payload.isAxiosError === true);
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/isURLSameOrigin.js":
+/*!***********************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/isURLSameOrigin.js ***!
+  \***********************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+
+module.exports = (
+  utils.isStandardBrowserEnv() ?
+
+  // Standard browser envs have full support of the APIs needed to test
+  // whether the request URL is of the same origin as current location.
+    (function standardBrowserEnv() {
+      var msie = /(msie|trident)/i.test(navigator.userAgent);
+      var urlParsingNode = document.createElement('a');
+      var originURL;
+
+      /**
+    * Parse a URL to discover it's components
+    *
+    * @param {String} url The URL to be parsed
+    * @returns {Object}
+    */
+      function resolveURL(url) {
+        var href = url;
+
+        if (msie) {
+        // IE needs attribute set twice to normalize properties
+          urlParsingNode.setAttribute('href', href);
+          href = urlParsingNode.href;
+        }
+
+        urlParsingNode.setAttribute('href', href);
+
+        // urlParsingNode provides the UrlUtils interface - http://url.spec.whatwg.org/#urlutils
+        return {
+          href: urlParsingNode.href,
+          protocol: urlParsingNode.protocol ? urlParsingNode.protocol.replace(/:$/, '') : '',
+          host: urlParsingNode.host,
+          search: urlParsingNode.search ? urlParsingNode.search.replace(/^\?/, '') : '',
+          hash: urlParsingNode.hash ? urlParsingNode.hash.replace(/^#/, '') : '',
+          hostname: urlParsingNode.hostname,
+          port: urlParsingNode.port,
+          pathname: (urlParsingNode.pathname.charAt(0) === '/') ?
+            urlParsingNode.pathname :
+            '/' + urlParsingNode.pathname
+        };
+      }
+
+      originURL = resolveURL(window.location.href);
+
+      /**
+    * Determine if a URL shares the same origin as the current location
+    *
+    * @param {String} requestURL The URL to test
+    * @returns {boolean} True if URL shares the same origin, otherwise false
+    */
+      return function isURLSameOrigin(requestURL) {
+        var parsed = (utils.isString(requestURL)) ? resolveURL(requestURL) : requestURL;
+        return (parsed.protocol === originURL.protocol &&
+            parsed.host === originURL.host);
+      };
+    })() :
+
+  // Non standard browser envs (web workers, react-native) lack needed support.
+    (function nonStandardBrowserEnv() {
+      return function isURLSameOrigin() {
+        return true;
+      };
+    })()
+);
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/normalizeHeaderName.js":
+/*!***************************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/normalizeHeaderName.js ***!
+  \***************************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ../utils */ "./node_modules/axios/lib/utils.js");
+
+module.exports = function normalizeHeaderName(headers, normalizedName) {
+  utils.forEach(headers, function processHeader(value, name) {
+    if (name !== normalizedName && name.toUpperCase() === normalizedName.toUpperCase()) {
+      headers[normalizedName] = value;
+      delete headers[name];
+    }
+  });
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/parseHeaders.js":
+/*!********************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/parseHeaders.js ***!
+  \********************************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+
+// Headers whose duplicates are ignored by node
+// c.f. https://nodejs.org/api/http.html#http_message_headers
+var ignoreDuplicateOf = [
+  'age', 'authorization', 'content-length', 'content-type', 'etag',
+  'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
+  'last-modified', 'location', 'max-forwards', 'proxy-authorization',
+  'referer', 'retry-after', 'user-agent'
+];
+
+/**
+ * Parse headers into an object
+ *
+ * ```
+ * Date: Wed, 27 Aug 2014 08:58:49 GMT
+ * Content-Type: application/json
+ * Connection: keep-alive
+ * Transfer-Encoding: chunked
+ * ```
+ *
+ * @param {String} headers Headers needing to be parsed
+ * @returns {Object} Headers parsed into an object
+ */
+module.exports = function parseHeaders(headers) {
+  var parsed = {};
+  var key;
+  var val;
+  var i;
+
+  if (!headers) { return parsed; }
+
+  utils.forEach(headers.split('\n'), function parser(line) {
+    i = line.indexOf(':');
+    key = utils.trim(line.substr(0, i)).toLowerCase();
+    val = utils.trim(line.substr(i + 1));
+
+    if (key) {
+      if (parsed[key] && ignoreDuplicateOf.indexOf(key) >= 0) {
+        return;
+      }
+      if (key === 'set-cookie') {
+        parsed[key] = (parsed[key] ? parsed[key] : []).concat([val]);
+      } else {
+        parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
+      }
+    }
+  });
+
+  return parsed;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/helpers/spread.js":
+/*!**************************************************!*\
+  !*** ./node_modules/axios/lib/helpers/spread.js ***!
+  \**************************************************/
+/***/ ((module) => {
+
+"use strict";
+
+
+/**
+ * Syntactic sugar for invoking a function and expanding an array for arguments.
+ *
+ * Common use case would be to use `Function.prototype.apply`.
+ *
+ *  ```js
+ *  function f(x, y, z) {}
+ *  var args = [1, 2, 3];
+ *  f.apply(null, args);
+ *  ```
+ *
+ * With `spread` this example can be re-written.
+ *
+ *  ```js
+ *  spread(function(x, y, z) {})([1, 2, 3]);
+ *  ```
+ *
+ * @param {Function} callback
+ * @returns {Function}
+ */
+module.exports = function spread(callback) {
+  return function wrap(arr) {
+    return callback.apply(null, arr);
+  };
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/utils.js":
+/*!*****************************************!*\
+  !*** ./node_modules/axios/lib/utils.js ***!
+  \*****************************************/
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+var bind = __webpack_require__(/*! ./helpers/bind */ "./node_modules/axios/lib/helpers/bind.js");
+
+/*global toString:true*/
+
+// utils is a library of generic helper functions non-specific to axios
+
+var toString = Object.prototype.toString;
+
+/**
+ * Determine if a value is an Array
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is an Array, otherwise false
+ */
+function isArray(val) {
+  return toString.call(val) === '[object Array]';
+}
+
+/**
+ * Determine if a value is undefined
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if the value is undefined, otherwise false
+ */
+function isUndefined(val) {
+  return typeof val === 'undefined';
+}
+
+/**
+ * Determine if a value is a Buffer
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a Buffer, otherwise false
+ */
+function isBuffer(val) {
+  return val !== null && !isUndefined(val) && val.constructor !== null && !isUndefined(val.constructor)
+    && typeof val.constructor.isBuffer === 'function' && val.constructor.isBuffer(val);
+}
+
+/**
+ * Determine if a value is an ArrayBuffer
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is an ArrayBuffer, otherwise false
+ */
+function isArrayBuffer(val) {
+  return toString.call(val) === '[object ArrayBuffer]';
+}
+
+/**
+ * Determine if a value is a FormData
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is an FormData, otherwise false
+ */
+function isFormData(val) {
+  return (typeof FormData !== 'undefined') && (val instanceof FormData);
+}
+
+/**
+ * Determine if a value is a view on an ArrayBuffer
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a view on an ArrayBuffer, otherwise false
+ */
+function isArrayBufferView(val) {
+  var result;
+  if ((typeof ArrayBuffer !== 'undefined') && (ArrayBuffer.isView)) {
+    result = ArrayBuffer.isView(val);
+  } else {
+    result = (val) && (val.buffer) && (val.buffer instanceof ArrayBuffer);
+  }
+  return result;
+}
+
+/**
+ * Determine if a value is a String
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a String, otherwise false
+ */
+function isString(val) {
+  return typeof val === 'string';
+}
+
+/**
+ * Determine if a value is a Number
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a Number, otherwise false
+ */
+function isNumber(val) {
+  return typeof val === 'number';
+}
+
+/**
+ * Determine if a value is an Object
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is an Object, otherwise false
+ */
+function isObject(val) {
+  return val !== null && typeof val === 'object';
+}
+
+/**
+ * Determine if a value is a plain Object
+ *
+ * @param {Object} val The value to test
+ * @return {boolean} True if value is a plain Object, otherwise false
+ */
+function isPlainObject(val) {
+  if (toString.call(val) !== '[object Object]') {
+    return false;
+  }
+
+  var prototype = Object.getPrototypeOf(val);
+  return prototype === null || prototype === Object.prototype;
+}
+
+/**
+ * Determine if a value is a Date
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a Date, otherwise false
+ */
+function isDate(val) {
+  return toString.call(val) === '[object Date]';
+}
+
+/**
+ * Determine if a value is a File
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a File, otherwise false
+ */
+function isFile(val) {
+  return toString.call(val) === '[object File]';
+}
+
+/**
+ * Determine if a value is a Blob
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a Blob, otherwise false
+ */
+function isBlob(val) {
+  return toString.call(val) === '[object Blob]';
+}
+
+/**
+ * Determine if a value is a Function
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a Function, otherwise false
+ */
+function isFunction(val) {
+  return toString.call(val) === '[object Function]';
+}
+
+/**
+ * Determine if a value is a Stream
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a Stream, otherwise false
+ */
+function isStream(val) {
+  return isObject(val) && isFunction(val.pipe);
+}
+
+/**
+ * Determine if a value is a URLSearchParams object
+ *
+ * @param {Object} val The value to test
+ * @returns {boolean} True if value is a URLSearchParams object, otherwise false
+ */
+function isURLSearchParams(val) {
+  return typeof URLSearchParams !== 'undefined' && val instanceof URLSearchParams;
+}
+
+/**
+ * Trim excess whitespace off the beginning and end of a string
+ *
+ * @param {String} str The String to trim
+ * @returns {String} The String freed of excess whitespace
+ */
+function trim(str) {
+  return str.replace(/^\s*/, '').replace(/\s*$/, '');
+}
+
+/**
+ * Determine if we're running in a standard browser environment
+ *
+ * This allows axios to run in a web worker, and react-native.
+ * Both environments support XMLHttpRequest, but not fully standard globals.
+ *
+ * web workers:
+ *  typeof window -> undefined
+ *  typeof document -> undefined
+ *
+ * react-native:
+ *  navigator.product -> 'ReactNative'
+ * nativescript
+ *  navigator.product -> 'NativeScript' or 'NS'
+ */
+function isStandardBrowserEnv() {
+  if (typeof navigator !== 'undefined' && (navigator.product === 'ReactNative' ||
+                                           navigator.product === 'NativeScript' ||
+                                           navigator.product === 'NS')) {
+    return false;
+  }
+  return (
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined'
+  );
+}
+
+/**
+ * Iterate over an Array or an Object invoking a function for each item.
+ *
+ * If `obj` is an Array callback will be called passing
+ * the value, index, and complete array for each item.
+ *
+ * If 'obj' is an Object callback will be called passing
+ * the value, key, and complete object for each property.
+ *
+ * @param {Object|Array} obj The object to iterate
+ * @param {Function} fn The callback to invoke for each item
+ */
+function forEach(obj, fn) {
+  // Don't bother if no value provided
+  if (obj === null || typeof obj === 'undefined') {
+    return;
+  }
+
+  // Force an array if not already something iterable
+  if (typeof obj !== 'object') {
+    /*eslint no-param-reassign:0*/
+    obj = [obj];
+  }
+
+  if (isArray(obj)) {
+    // Iterate over array values
+    for (var i = 0, l = obj.length; i < l; i++) {
+      fn.call(null, obj[i], i, obj);
+    }
+  } else {
+    // Iterate over object keys
+    for (var key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        fn.call(null, obj[key], key, obj);
+      }
+    }
+  }
+}
+
+/**
+ * Accepts varargs expecting each argument to be an object, then
+ * immutably merges the properties of each object and returns result.
+ *
+ * When multiple objects contain the same key the later object in
+ * the arguments list will take precedence.
+ *
+ * Example:
+ *
+ * ```js
+ * var result = merge({foo: 123}, {foo: 456});
+ * console.log(result.foo); // outputs 456
+ * ```
+ *
+ * @param {Object} obj1 Object to merge
+ * @returns {Object} Result of all merge properties
+ */
+function merge(/* obj1, obj2, obj3, ... */) {
+  var result = {};
+  function assignValue(val, key) {
+    if (isPlainObject(result[key]) && isPlainObject(val)) {
+      result[key] = merge(result[key], val);
+    } else if (isPlainObject(val)) {
+      result[key] = merge({}, val);
+    } else if (isArray(val)) {
+      result[key] = val.slice();
+    } else {
+      result[key] = val;
+    }
+  }
+
+  for (var i = 0, l = arguments.length; i < l; i++) {
+    forEach(arguments[i], assignValue);
+  }
+  return result;
+}
+
+/**
+ * Extends object a by mutably adding to it the properties of object b.
+ *
+ * @param {Object} a The object to be extended
+ * @param {Object} b The object to copy properties from
+ * @param {Object} thisArg The object to bind function to
+ * @return {Object} The resulting value of object a
+ */
+function extend(a, b, thisArg) {
+  forEach(b, function assignValue(val, key) {
+    if (thisArg && typeof val === 'function') {
+      a[key] = bind(val, thisArg);
+    } else {
+      a[key] = val;
+    }
+  });
+  return a;
+}
+
+/**
+ * Remove byte order marker. This catches EF BB BF (the UTF-8 BOM)
+ *
+ * @param {string} content with BOM
+ * @return {string} content value without BOM
+ */
+function stripBOM(content) {
+  if (content.charCodeAt(0) === 0xFEFF) {
+    content = content.slice(1);
+  }
+  return content;
+}
+
+module.exports = {
+  isArray: isArray,
+  isArrayBuffer: isArrayBuffer,
+  isBuffer: isBuffer,
+  isFormData: isFormData,
+  isArrayBufferView: isArrayBufferView,
+  isString: isString,
+  isNumber: isNumber,
+  isObject: isObject,
+  isPlainObject: isPlainObject,
+  isUndefined: isUndefined,
+  isDate: isDate,
+  isFile: isFile,
+  isBlob: isBlob,
+  isFunction: isFunction,
+  isStream: isStream,
+  isURLSearchParams: isURLSearchParams,
+  isStandardBrowserEnv: isStandardBrowserEnv,
+  forEach: forEach,
+  merge: merge,
+  extend: extend,
+  trim: trim,
+  stripBOM: stripBOM
+};
+
+
+/***/ }),
+
 /***/ "./front-end/javascript/main.js":
 /*!**************************************!*\
   !*** ./front-end/javascript/main.js ***!
@@ -3125,14 +4958,17 @@ function within(min, value, max) {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var vue__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! vue */ "./node_modules/vue/dist/vue.esm.js");
-/* harmony import */ var bootstrap__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! bootstrap */ "./node_modules/bootstrap/dist/js/bootstrap.esm.js");
-/* harmony import */ var _App__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./App */ "./front-end/javascript/App.vue");
+/* harmony import */ var x5_gmaps__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! x5-gmaps */ "./node_modules/x5-gmaps/dist/x5-gmaps.esm.js");
+/* harmony import */ var bootstrap__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! bootstrap */ "./node_modules/bootstrap/dist/js/bootstrap.esm.js");
+/* harmony import */ var _App__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./App */ "./front-end/javascript/App.vue");
 
 
+
+vue__WEBPACK_IMPORTED_MODULE_2__.default.use(x5_gmaps__WEBPACK_IMPORTED_MODULE_0__.default, 'AIzaSyAUFGJ0wjNVSr8HXtYFNIwXjPrHSYblyr4');
 
 new vue__WEBPACK_IMPORTED_MODULE_2__.default({
   render: function render(h) {
-    return h(_App__WEBPACK_IMPORTED_MODULE_1__.default);
+    return h(_App__WEBPACK_IMPORTED_MODULE_3__.default);
   }
 }).$mount('#app');
 
@@ -3150,7 +4986,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
 /* harmony export */ });
 /* harmony import */ var _components_api_token_form__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./components/api-token-form */ "./front-end/javascript/components/api-token-form.vue");
-/* harmony import */ var _components_vehicle_table__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./components/vehicle-table */ "./front-end/javascript/components/vehicle-table.vue");
+/* harmony import */ var _components_date_selection_form__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./components/date-selection-form */ "./front-end/javascript/components/date-selection-form.vue");
+/* harmony import */ var _components_vehicle_table__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./components/vehicle-table */ "./front-end/javascript/components/vehicle-table.vue");
+/* harmony import */ var _components_map_container__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./components/map-container */ "./front-end/javascript/components/map-container.vue");
 //
 //
 //
@@ -3165,22 +5003,43 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+
 
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   name: "app",
   components: {
     apiTokenForm: _components_api_token_form__WEBPACK_IMPORTED_MODULE_0__.default,
-    vehicleTable: _components_vehicle_table__WEBPACK_IMPORTED_MODULE_1__.default
+    dateSelectionForm: _components_date_selection_form__WEBPACK_IMPORTED_MODULE_1__.default,
+    vehicleTable: _components_vehicle_table__WEBPACK_IMPORTED_MODULE_2__.default,
+    mapContainer: _components_map_container__WEBPACK_IMPORTED_MODULE_3__.default
   },
   data: function data() {
     return {
-      vehicleLatestData: []
+      vehicleLatestData: [],
+      activeVehicle: {},
+      apiToken: null
     };
   },
   methods: {
-    onVehicleListUpdate: function onVehicleListUpdate(data) {
+    onVehicleListUpdate: function onVehicleListUpdate(data, apiToken) {
       this.vehicleLatestData = data;
+      this.apiToken = apiToken;
+    },
+    onVehicleSelected: function onVehicleSelected(vehicle) {
+      this.activeVehicle = vehicle;
     }
   }
 });
@@ -3271,7 +5130,7 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
               case 8:
                 res = _context.sent;
                 _context.t0 = res.status;
-                _context.next = _context.t0 === 200 ? 12 : _context.t0 === 401 ? 18 : 21;
+                _context.next = _context.t0 === 200 ? 12 : _context.t0 === 401 ? 19 : 22;
                 break;
 
               case 12:
@@ -3281,21 +5140,22 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
 
               case 15:
                 _context.t2 = _context.sent;
+                _context.t3 = _this.token;
 
-                _context.t1.$emit.call(_context.t1, 'vehicle-list-update', _context.t2);
+                _context.t1.$emit.call(_context.t1, 'vehicle-list-update', _context.t2, _context.t3);
 
-                return _context.abrupt("break", 23);
+                return _context.abrupt("break", 24);
 
-              case 18:
+              case 19:
                 _this.error = 'Invalid API token';
                 _this.isInvalid = true;
-                return _context.abrupt("break", 23);
+                return _context.abrupt("break", 24);
 
-              case 21:
+              case 22:
                 _this.error = 'Unknown error';
                 _this.isInvalid = true;
 
-              case 23:
+              case 24:
               case "end":
                 return _context.stop();
             }
@@ -3325,6 +5185,232 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
           }
         }, _callee2);
       }))();
+    }
+  }
+});
+
+/***/ }),
+
+/***/ "./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/date-selection-form.vue?vue&type=script&lang=js&":
+/*!**********************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/date-selection-form.vue?vue&type=script&lang=js& ***!
+  \**********************************************************************************************************************************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @babel/runtime/regenerator */ "./node_modules/@babel/runtime/regenerator/index.js");
+/* harmony import */ var _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var axios__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! axios */ "./node_modules/axios/index.js");
+/* harmony import */ var axios__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(axios__WEBPACK_IMPORTED_MODULE_1__);
+
+
+function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
+
+function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); }; }
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  name: "date-selection-form",
+  props: {
+    apiToken: String,
+    activeVehicle: Object
+  },
+  data: function data() {
+    return {
+      date: null,
+      error: null,
+      isInvalid: false
+    };
+  },
+  methods: {
+    onSubmit: function onSubmit() {
+      var _this = this;
+
+      return _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default().mark(function _callee() {
+        var res;
+        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default().wrap(function _callee$(_context) {
+          while (1) {
+            switch (_context.prev = _context.next) {
+              case 0:
+                _this.isInvalid = false;
+                _this.error = null;
+                _context.next = 4;
+                return _this.fetchData();
+
+              case 4:
+                res = _context.sent;
+                console.log(res);
+                _context.t0 = res.status;
+                _context.next = _context.t0 === 200 ? 9 : _context.t0 === 401 ? 15 : 18;
+                break;
+
+              case 9:
+                _context.t1 = _this;
+                _context.next = 12;
+                return res.data;
+
+              case 12:
+                _context.t2 = _context.sent;
+
+                _context.t1.$emit.call(_context.t1, 'vehicle-list-update', _context.t2);
+
+                return _context.abrupt("break", 20);
+
+              case 15:
+                _this.error = 'Invalid API token';
+                _this.isInvalid = true;
+                return _context.abrupt("break", 20);
+
+              case 18:
+                _this.error = 'Unknown error';
+                _this.isInvalid = true;
+
+              case 20:
+              case "end":
+                return _context.stop();
+            }
+          }
+        }, _callee);
+      }))();
+    },
+    canDisplayForm: function canDisplayForm() {
+      var _this$activeVehicle;
+
+      return this.apiToken && ((_this$activeVehicle = this.activeVehicle) === null || _this$activeVehicle === void 0 ? void 0 : _this$activeVehicle.objectId);
+    },
+    fetchData: function fetchData() {
+      var _this2 = this;
+
+      return _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default().mark(function _callee2() {
+        return _babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default().wrap(function _callee2$(_context2) {
+          while (1) {
+            switch (_context2.prev = _context2.next) {
+              case 0:
+                return _context2.abrupt("return", axios__WEBPACK_IMPORTED_MODULE_1___default().get('vehicle-route-data', {
+                  params: {
+                    date: _this2.date,
+                    objectId: _this2.activeVehicle.objectId
+                  },
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-token': _this2.apiToken
+                  }
+                }));
+
+              case 1:
+              case "end":
+                return _context2.stop();
+            }
+          }
+        }, _callee2);
+      }))();
+    }
+  }
+});
+
+/***/ }),
+
+/***/ "./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=script&lang=js&":
+/*!****************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=script&lang=js& ***!
+  \****************************************************************************************************************************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var x5_gmaps__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! x5-gmaps */ "./node_modules/x5-gmaps/dist/x5-gmaps.esm.js");
+//
+//
+//
+//
+//
+//
+//
+//
+//
+
+var DEFAULT_CENTER = {
+  lat: 58.406288,
+  lng: 26.741240
+};
+var INITIAL_ZOOM = 10;
+var SELECTED_VEHICLE_ZOOM = 18;
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
+  name: "map-container",
+  props: {
+    vehicleList: Array,
+    activeVehicle: Object
+  },
+  data: function data() {
+    return {
+      mapOptions: {
+        center: this.getMapCenter(this.activeVehicle),
+        zoom: INITIAL_ZOOM,
+        disableDefaultUI: true
+      }
+    };
+  },
+  watch: {
+    activeVehicle: function activeVehicle(newVal, oldVal) {
+      this.mapOptions.center = this.getMapCenter(newVal);
+      this.mapOptions.zoom = SELECTED_VEHICLE_ZOOM;
+    }
+  },
+  computed: {},
+  components: {
+    gmapsMap: x5_gmaps__WEBPACK_IMPORTED_MODULE_0__.gmapsMap,
+    gmapsMarker: x5_gmaps__WEBPACK_IMPORTED_MODULE_0__.gmapsMarker
+  },
+  methods: {
+    getMapCenter: function getMapCenter() {
+      var _vehicle$latitude, _vehicle$longitude;
+
+      var vehicle = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+      return {
+        lat: (_vehicle$latitude = vehicle === null || vehicle === void 0 ? void 0 : vehicle.latitude) !== null && _vehicle$latitude !== void 0 ? _vehicle$latitude : DEFAULT_CENTER.lat,
+        lng: (_vehicle$longitude = vehicle === null || vehicle === void 0 ? void 0 : vehicle.longitude) !== null && _vehicle$longitude !== void 0 ? _vehicle$longitude : DEFAULT_CENTER.lng
+      };
     }
   }
 });
@@ -8398,6 +10484,54 @@ defineJQueryPlugin(Toast);
 
 /***/ }),
 
+/***/ "./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css&":
+/*!*************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css& ***!
+  \*************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/***/ ((module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../../node_modules/css-loader/dist/runtime/api.js */ "./node_modules/css-loader/dist/runtime/api.js");
+/* harmony import */ var _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0__);
+// Imports
+
+var ___CSS_LOADER_EXPORT___ = _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0___default()(function(i){return i[1]});
+// Module
+___CSS_LOADER_EXPORT___.push([module.id, "\n#api-key-form[data-v-0fc010f0] {\n  max-width: 500px;\n}\n", ""]);
+// Exports
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
+
+
+/***/ }),
+
+/***/ "./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css&":
+/*!************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css& ***!
+  \************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/***/ ((module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../../node_modules/css-loader/dist/runtime/api.js */ "./node_modules/css-loader/dist/runtime/api.js");
+/* harmony import */ var _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0__);
+// Imports
+
+var ___CSS_LOADER_EXPORT___ = _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0___default()(function(i){return i[1]});
+// Module
+___CSS_LOADER_EXPORT___.push([module.id, "\n#map[data-v-956f3afa] {\n  min-height: 400px;\n}\n", ""]);
+// Exports
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
+
+
+/***/ }),
+
 /***/ "./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/vehicle-table.vue?vue&type=style&index=0&id=71a5c8a0&scoped=true&lang=css&":
 /*!************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
   !*** ./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/vehicle-table.vue?vue&type=style&index=0&id=71a5c8a0&scoped=true&lang=css& ***!
@@ -8495,6 +10629,66 @@ module.exports = function (cssWithMappingToString) {
 
   return list;
 };
+
+/***/ }),
+
+/***/ "./node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css&":
+/*!******************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css& ***!
+  \******************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! !../../../node_modules/laravel-mix/node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js */ "./node_modules/laravel-mix/node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js");
+/* harmony import */ var _node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_api_token_form_vue_vue_type_style_index_0_id_0fc010f0_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! !!../../../node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!../../../node_modules/vue-loader/lib/loaders/stylePostLoader.js!../../../node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css& */ "./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css&");
+
+            
+
+var options = {};
+
+options.insert = "head";
+options.singleton = false;
+
+var update = _node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0___default()(_node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_api_token_form_vue_vue_type_style_index_0_id_0fc010f0_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_1__.default, options);
+
+
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_api_token_form_vue_vue_type_style_index_0_id_0fc010f0_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_1__.default.locals || {});
+
+/***/ }),
+
+/***/ "./node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css&":
+/*!*****************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css& ***!
+  \*****************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! !../../../node_modules/laravel-mix/node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js */ "./node_modules/laravel-mix/node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js");
+/* harmony import */ var _node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_style_index_0_id_956f3afa_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! !!../../../node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!../../../node_modules/vue-loader/lib/loaders/stylePostLoader.js!../../../node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css& */ "./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css&");
+
+            
+
+var options = {};
+
+options.insert = "head";
+options.singleton = false;
+
+var update = _node_modules_laravel_mix_node_modules_style_loader_dist_runtime_injectStylesIntoStyleTag_js__WEBPACK_IMPORTED_MODULE_0___default()(_node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_style_index_0_id_956f3afa_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_1__.default, options);
+
+
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_style_index_0_id_956f3afa_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_1__.default.locals || {});
 
 /***/ }),
 
@@ -8816,6 +11010,200 @@ module.exports = function (list, options) {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 // extracted by mini-css-extract-plugin
+
+
+/***/ }),
+
+/***/ "./node_modules/process/browser.js":
+/*!*****************************************!*\
+  !*** ./node_modules/process/browser.js ***!
+  \*****************************************/
+/***/ ((module) => {
+
+// shim for using process in browser
+var process = module.exports = {};
+
+// cached from whatever global is present so that test runners that stub it
+// don't break things.  But we need to wrap it in a try catch in case it is
+// wrapped in strict mode code which doesn't define any globals.  It's inside a
+// function because try/catches deoptimize in certain engines.
+
+var cachedSetTimeout;
+var cachedClearTimeout;
+
+function defaultSetTimout() {
+    throw new Error('setTimeout has not been defined');
+}
+function defaultClearTimeout () {
+    throw new Error('clearTimeout has not been defined');
+}
+(function () {
+    try {
+        if (typeof setTimeout === 'function') {
+            cachedSetTimeout = setTimeout;
+        } else {
+            cachedSetTimeout = defaultSetTimout;
+        }
+    } catch (e) {
+        cachedSetTimeout = defaultSetTimout;
+    }
+    try {
+        if (typeof clearTimeout === 'function') {
+            cachedClearTimeout = clearTimeout;
+        } else {
+            cachedClearTimeout = defaultClearTimeout;
+        }
+    } catch (e) {
+        cachedClearTimeout = defaultClearTimeout;
+    }
+} ())
+function runTimeout(fun) {
+    if (cachedSetTimeout === setTimeout) {
+        //normal enviroments in sane situations
+        return setTimeout(fun, 0);
+    }
+    // if setTimeout wasn't available but was latter defined
+    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
+        cachedSetTimeout = setTimeout;
+        return setTimeout(fun, 0);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedSetTimeout(fun, 0);
+    } catch(e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+            return cachedSetTimeout.call(null, fun, 0);
+        } catch(e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+            return cachedSetTimeout.call(this, fun, 0);
+        }
+    }
+
+
+}
+function runClearTimeout(marker) {
+    if (cachedClearTimeout === clearTimeout) {
+        //normal enviroments in sane situations
+        return clearTimeout(marker);
+    }
+    // if clearTimeout wasn't available but was latter defined
+    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
+        cachedClearTimeout = clearTimeout;
+        return clearTimeout(marker);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedClearTimeout(marker);
+    } catch (e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+            return cachedClearTimeout.call(null, marker);
+        } catch (e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+            return cachedClearTimeout.call(this, marker);
+        }
+    }
+
+
+
+}
+var queue = [];
+var draining = false;
+var currentQueue;
+var queueIndex = -1;
+
+function cleanUpNextTick() {
+    if (!draining || !currentQueue) {
+        return;
+    }
+    draining = false;
+    if (currentQueue.length) {
+        queue = currentQueue.concat(queue);
+    } else {
+        queueIndex = -1;
+    }
+    if (queue.length) {
+        drainQueue();
+    }
+}
+
+function drainQueue() {
+    if (draining) {
+        return;
+    }
+    var timeout = runTimeout(cleanUpNextTick);
+    draining = true;
+
+    var len = queue.length;
+    while(len) {
+        currentQueue = queue;
+        queue = [];
+        while (++queueIndex < len) {
+            if (currentQueue) {
+                currentQueue[queueIndex].run();
+            }
+        }
+        queueIndex = -1;
+        len = queue.length;
+    }
+    currentQueue = null;
+    draining = false;
+    runClearTimeout(timeout);
+}
+
+process.nextTick = function (fun) {
+    var args = new Array(arguments.length - 1);
+    if (arguments.length > 1) {
+        for (var i = 1; i < arguments.length; i++) {
+            args[i - 1] = arguments[i];
+        }
+    }
+    queue.push(new Item(fun, args));
+    if (queue.length === 1 && !draining) {
+        runTimeout(drainQueue);
+    }
+};
+
+// v8 likes predictible objects
+function Item(fun, array) {
+    this.fun = fun;
+    this.array = array;
+}
+Item.prototype.run = function () {
+    this.fun.apply(null, this.array);
+};
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
+process.versions = {};
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+process.prependListener = noop;
+process.prependOnceListener = noop;
+
+process.listeners = function (name) { return [] }
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+};
+
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+process.umask = function() { return 0; };
 
 
 /***/ }),
@@ -9584,6 +11972,344 @@ try {
 
 /***/ }),
 
+/***/ "./node_modules/vue-class-component/dist/vue-class-component.esm.js":
+/*!**************************************************************************!*\
+  !*** ./node_modules/vue-class-component/dist/vue-class-component.esm.js ***!
+  \**************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__),
+/* harmony export */   "createDecorator": () => (/* binding */ createDecorator),
+/* harmony export */   "mixins": () => (/* binding */ mixins)
+/* harmony export */ });
+/* harmony import */ var vue__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue */ "./node_modules/vue/dist/vue.esm.js");
+/**
+  * vue-class-component v7.2.6
+  * (c) 2015-present Evan You
+  * @license MIT
+  */
+
+
+function _typeof(obj) {
+  if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
+    _typeof = function (obj) {
+      return typeof obj;
+    };
+  } else {
+    _typeof = function (obj) {
+      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+    };
+  }
+
+  return _typeof(obj);
+}
+
+function _defineProperty(obj, key, value) {
+  if (key in obj) {
+    Object.defineProperty(obj, key, {
+      value: value,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    });
+  } else {
+    obj[key] = value;
+  }
+
+  return obj;
+}
+
+function _toConsumableArray(arr) {
+  return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread();
+}
+
+function _arrayWithoutHoles(arr) {
+  if (Array.isArray(arr)) {
+    for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) arr2[i] = arr[i];
+
+    return arr2;
+  }
+}
+
+function _iterableToArray(iter) {
+  if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter);
+}
+
+function _nonIterableSpread() {
+  throw new TypeError("Invalid attempt to spread non-iterable instance");
+}
+
+// The rational behind the verbose Reflect-feature check below is the fact that there are polyfills
+// which add an implementation for Reflect.defineMetadata but not for Reflect.getOwnMetadataKeys.
+// Without this check consumers will encounter hard to track down runtime errors.
+function reflectionIsSupported() {
+  return typeof Reflect !== 'undefined' && Reflect.defineMetadata && Reflect.getOwnMetadataKeys;
+}
+function copyReflectionMetadata(to, from) {
+  forwardMetadata(to, from);
+  Object.getOwnPropertyNames(from.prototype).forEach(function (key) {
+    forwardMetadata(to.prototype, from.prototype, key);
+  });
+  Object.getOwnPropertyNames(from).forEach(function (key) {
+    forwardMetadata(to, from, key);
+  });
+}
+
+function forwardMetadata(to, from, propertyKey) {
+  var metaKeys = propertyKey ? Reflect.getOwnMetadataKeys(from, propertyKey) : Reflect.getOwnMetadataKeys(from);
+  metaKeys.forEach(function (metaKey) {
+    var metadata = propertyKey ? Reflect.getOwnMetadata(metaKey, from, propertyKey) : Reflect.getOwnMetadata(metaKey, from);
+
+    if (propertyKey) {
+      Reflect.defineMetadata(metaKey, metadata, to, propertyKey);
+    } else {
+      Reflect.defineMetadata(metaKey, metadata, to);
+    }
+  });
+}
+
+var fakeArray = {
+  __proto__: []
+};
+var hasProto = fakeArray instanceof Array;
+function createDecorator(factory) {
+  return function (target, key, index) {
+    var Ctor = typeof target === 'function' ? target : target.constructor;
+
+    if (!Ctor.__decorators__) {
+      Ctor.__decorators__ = [];
+    }
+
+    if (typeof index !== 'number') {
+      index = undefined;
+    }
+
+    Ctor.__decorators__.push(function (options) {
+      return factory(options, key, index);
+    });
+  };
+}
+function mixins() {
+  for (var _len = arguments.length, Ctors = new Array(_len), _key = 0; _key < _len; _key++) {
+    Ctors[_key] = arguments[_key];
+  }
+
+  return vue__WEBPACK_IMPORTED_MODULE_0__.default.extend({
+    mixins: Ctors
+  });
+}
+function isPrimitive(value) {
+  var type = _typeof(value);
+
+  return value == null || type !== 'object' && type !== 'function';
+}
+function warn(message) {
+  if (typeof console !== 'undefined') {
+    console.warn('[vue-class-component] ' + message);
+  }
+}
+
+function collectDataFromConstructor(vm, Component) {
+  // override _init to prevent to init as Vue instance
+  var originalInit = Component.prototype._init;
+
+  Component.prototype._init = function () {
+    var _this = this;
+
+    // proxy to actual vm
+    var keys = Object.getOwnPropertyNames(vm); // 2.2.0 compat (props are no longer exposed as self properties)
+
+    if (vm.$options.props) {
+      for (var key in vm.$options.props) {
+        if (!vm.hasOwnProperty(key)) {
+          keys.push(key);
+        }
+      }
+    }
+
+    keys.forEach(function (key) {
+      Object.defineProperty(_this, key, {
+        get: function get() {
+          return vm[key];
+        },
+        set: function set(value) {
+          vm[key] = value;
+        },
+        configurable: true
+      });
+    });
+  }; // should be acquired class property values
+
+
+  var data = new Component(); // restore original _init to avoid memory leak (#209)
+
+  Component.prototype._init = originalInit; // create plain data object
+
+  var plainData = {};
+  Object.keys(data).forEach(function (key) {
+    if (data[key] !== undefined) {
+      plainData[key] = data[key];
+    }
+  });
+
+  if (true) {
+    if (!(Component.prototype instanceof vue__WEBPACK_IMPORTED_MODULE_0__.default) && Object.keys(plainData).length > 0) {
+      warn('Component class must inherit Vue or its descendant class ' + 'when class property is used.');
+    }
+  }
+
+  return plainData;
+}
+
+var $internalHooks = ['data', 'beforeCreate', 'created', 'beforeMount', 'mounted', 'beforeDestroy', 'destroyed', 'beforeUpdate', 'updated', 'activated', 'deactivated', 'render', 'errorCaptured', 'serverPrefetch' // 2.6
+];
+function componentFactory(Component) {
+  var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+  options.name = options.name || Component._componentTag || Component.name; // prototype props.
+
+  var proto = Component.prototype;
+  Object.getOwnPropertyNames(proto).forEach(function (key) {
+    if (key === 'constructor') {
+      return;
+    } // hooks
+
+
+    if ($internalHooks.indexOf(key) > -1) {
+      options[key] = proto[key];
+      return;
+    }
+
+    var descriptor = Object.getOwnPropertyDescriptor(proto, key);
+
+    if (descriptor.value !== void 0) {
+      // methods
+      if (typeof descriptor.value === 'function') {
+        (options.methods || (options.methods = {}))[key] = descriptor.value;
+      } else {
+        // typescript decorated data
+        (options.mixins || (options.mixins = [])).push({
+          data: function data() {
+            return _defineProperty({}, key, descriptor.value);
+          }
+        });
+      }
+    } else if (descriptor.get || descriptor.set) {
+      // computed properties
+      (options.computed || (options.computed = {}))[key] = {
+        get: descriptor.get,
+        set: descriptor.set
+      };
+    }
+  });
+  (options.mixins || (options.mixins = [])).push({
+    data: function data() {
+      return collectDataFromConstructor(this, Component);
+    }
+  }); // decorate options
+
+  var decorators = Component.__decorators__;
+
+  if (decorators) {
+    decorators.forEach(function (fn) {
+      return fn(options);
+    });
+    delete Component.__decorators__;
+  } // find super
+
+
+  var superProto = Object.getPrototypeOf(Component.prototype);
+  var Super = superProto instanceof vue__WEBPACK_IMPORTED_MODULE_0__.default ? superProto.constructor : vue__WEBPACK_IMPORTED_MODULE_0__.default;
+  var Extended = Super.extend(options);
+  forwardStaticMembers(Extended, Component, Super);
+
+  if (reflectionIsSupported()) {
+    copyReflectionMetadata(Extended, Component);
+  }
+
+  return Extended;
+}
+var reservedPropertyNames = [// Unique id
+'cid', // Super Vue constructor
+'super', // Component options that will be used by the component
+'options', 'superOptions', 'extendOptions', 'sealedOptions', // Private assets
+'component', 'directive', 'filter'];
+var shouldIgnore = {
+  prototype: true,
+  arguments: true,
+  callee: true,
+  caller: true
+};
+
+function forwardStaticMembers(Extended, Original, Super) {
+  // We have to use getOwnPropertyNames since Babel registers methods as non-enumerable
+  Object.getOwnPropertyNames(Original).forEach(function (key) {
+    // Skip the properties that should not be overwritten
+    if (shouldIgnore[key]) {
+      return;
+    } // Some browsers does not allow reconfigure built-in properties
+
+
+    var extendedDescriptor = Object.getOwnPropertyDescriptor(Extended, key);
+
+    if (extendedDescriptor && !extendedDescriptor.configurable) {
+      return;
+    }
+
+    var descriptor = Object.getOwnPropertyDescriptor(Original, key); // If the user agent does not support `__proto__` or its family (IE <= 10),
+    // the sub class properties may be inherited properties from the super class in TypeScript.
+    // We need to exclude such properties to prevent to overwrite
+    // the component options object which stored on the extended constructor (See #192).
+    // If the value is a referenced value (object or function),
+    // we can check equality of them and exclude it if they have the same reference.
+    // If it is a primitive value, it will be forwarded for safety.
+
+    if (!hasProto) {
+      // Only `cid` is explicitly exluded from property forwarding
+      // because we cannot detect whether it is a inherited property or not
+      // on the no `__proto__` environment even though the property is reserved.
+      if (key === 'cid') {
+        return;
+      }
+
+      var superDescriptor = Object.getOwnPropertyDescriptor(Super, key);
+
+      if (!isPrimitive(descriptor.value) && superDescriptor && superDescriptor.value === descriptor.value) {
+        return;
+      }
+    } // Warn if the users manually declare reserved properties
+
+
+    if ( true && reservedPropertyNames.indexOf(key) >= 0) {
+      warn("Static property name '".concat(key, "' declared on class '").concat(Original.name, "' ") + 'conflicts with reserved property name of Vue internal. ' + 'It may cause unexpected behavior of the component. Consider renaming the property.');
+    }
+
+    Object.defineProperty(Extended, key, descriptor);
+  });
+}
+
+function Component(options) {
+  if (typeof options === 'function') {
+    return componentFactory(options);
+  }
+
+  return function (Component) {
+    return componentFactory(Component, options);
+  };
+}
+
+Component.registerHooks = function registerHooks(keys) {
+  $internalHooks.push.apply($internalHooks, _toConsumableArray(keys));
+};
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (Component);
+
+
+
+/***/ }),
+
 /***/ "./front-end/javascript/App.vue":
 /*!**************************************!*\
   !*** ./front-end/javascript/App.vue ***!
@@ -9636,15 +12362,17 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var _api_token_form_vue_vue_type_template_id_0fc010f0_scoped_true___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./api-token-form.vue?vue&type=template&id=0fc010f0&scoped=true& */ "./front-end/javascript/components/api-token-form.vue?vue&type=template&id=0fc010f0&scoped=true&");
 /* harmony import */ var _api_token_form_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./api-token-form.vue?vue&type=script&lang=js& */ "./front-end/javascript/components/api-token-form.vue?vue&type=script&lang=js&");
-/* harmony import */ var _node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! !../../../node_modules/vue-loader/lib/runtime/componentNormalizer.js */ "./node_modules/vue-loader/lib/runtime/componentNormalizer.js");
+/* harmony import */ var _api_token_form_vue_vue_type_style_index_0_id_0fc010f0_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css& */ "./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css&");
+/* harmony import */ var _node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! !../../../node_modules/vue-loader/lib/runtime/componentNormalizer.js */ "./node_modules/vue-loader/lib/runtime/componentNormalizer.js");
 
 
 
+;
 
 
 /* normalize component */
-;
-var component = (0,_node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_2__.default)(
+
+var component = (0,_node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_3__.default)(
   _api_token_form_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_1__.default,
   _api_token_form_vue_vue_type_template_id_0fc010f0_scoped_true___WEBPACK_IMPORTED_MODULE_0__.render,
   _api_token_form_vue_vue_type_template_id_0fc010f0_scoped_true___WEBPACK_IMPORTED_MODULE_0__.staticRenderFns,
@@ -9658,6 +12386,86 @@ var component = (0,_node_modules_vue_loader_lib_runtime_componentNormalizer_js__
 /* hot reload */
 if (false) { var api; }
 component.options.__file = "front-end/javascript/components/api-token-form.vue"
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (component.exports);
+
+/***/ }),
+
+/***/ "./front-end/javascript/components/date-selection-form.vue":
+/*!*****************************************************************!*\
+  !*** ./front-end/javascript/components/date-selection-form.vue ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _date_selection_form_vue_vue_type_template_id_f5667152_scoped_true___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./date-selection-form.vue?vue&type=template&id=f5667152&scoped=true& */ "./front-end/javascript/components/date-selection-form.vue?vue&type=template&id=f5667152&scoped=true&");
+/* harmony import */ var _date_selection_form_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./date-selection-form.vue?vue&type=script&lang=js& */ "./front-end/javascript/components/date-selection-form.vue?vue&type=script&lang=js&");
+/* harmony import */ var _node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! !../../../node_modules/vue-loader/lib/runtime/componentNormalizer.js */ "./node_modules/vue-loader/lib/runtime/componentNormalizer.js");
+
+
+
+
+
+/* normalize component */
+;
+var component = (0,_node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_2__.default)(
+  _date_selection_form_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_1__.default,
+  _date_selection_form_vue_vue_type_template_id_f5667152_scoped_true___WEBPACK_IMPORTED_MODULE_0__.render,
+  _date_selection_form_vue_vue_type_template_id_f5667152_scoped_true___WEBPACK_IMPORTED_MODULE_0__.staticRenderFns,
+  false,
+  null,
+  "f5667152",
+  null
+  
+)
+
+/* hot reload */
+if (false) { var api; }
+component.options.__file = "front-end/javascript/components/date-selection-form.vue"
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (component.exports);
+
+/***/ }),
+
+/***/ "./front-end/javascript/components/map-container.vue":
+/*!***********************************************************!*\
+  !*** ./front-end/javascript/components/map-container.vue ***!
+  \***********************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _map_container_vue_vue_type_template_id_956f3afa_scoped_true___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./map-container.vue?vue&type=template&id=956f3afa&scoped=true& */ "./front-end/javascript/components/map-container.vue?vue&type=template&id=956f3afa&scoped=true&");
+/* harmony import */ var _map_container_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./map-container.vue?vue&type=script&lang=js& */ "./front-end/javascript/components/map-container.vue?vue&type=script&lang=js&");
+/* harmony import */ var _map_container_vue_vue_type_style_index_0_id_956f3afa_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css& */ "./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css&");
+/* harmony import */ var _node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! !../../../node_modules/vue-loader/lib/runtime/componentNormalizer.js */ "./node_modules/vue-loader/lib/runtime/componentNormalizer.js");
+
+
+
+;
+
+
+/* normalize component */
+
+var component = (0,_node_modules_vue_loader_lib_runtime_componentNormalizer_js__WEBPACK_IMPORTED_MODULE_3__.default)(
+  _map_container_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_1__.default,
+  _map_container_vue_vue_type_template_id_956f3afa_scoped_true___WEBPACK_IMPORTED_MODULE_0__.render,
+  _map_container_vue_vue_type_template_id_956f3afa_scoped_true___WEBPACK_IMPORTED_MODULE_0__.staticRenderFns,
+  false,
+  null,
+  "956f3afa",
+  null
+  
+)
+
+/* hot reload */
+if (false) { var api; }
+component.options.__file = "front-end/javascript/components/map-container.vue"
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (component.exports);
 
 /***/ }),
@@ -9735,6 +12543,38 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
+/***/ "./front-end/javascript/components/date-selection-form.vue?vue&type=script&lang=js&":
+/*!******************************************************************************************!*\
+  !*** ./front-end/javascript/components/date-selection-form.vue?vue&type=script&lang=js& ***!
+  \******************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _node_modules_babel_loader_lib_index_js_clonedRuleSet_5_0_rules_0_use_0_node_modules_vue_loader_lib_index_js_vue_loader_options_date_selection_form_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./date-selection-form.vue?vue&type=script&lang=js& */ "./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/date-selection-form.vue?vue&type=script&lang=js&");
+ /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_babel_loader_lib_index_js_clonedRuleSet_5_0_rules_0_use_0_node_modules_vue_loader_lib_index_js_vue_loader_options_date_selection_form_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_0__.default); 
+
+/***/ }),
+
+/***/ "./front-end/javascript/components/map-container.vue?vue&type=script&lang=js&":
+/*!************************************************************************************!*\
+  !*** ./front-end/javascript/components/map-container.vue?vue&type=script&lang=js& ***!
+  \************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var _node_modules_babel_loader_lib_index_js_clonedRuleSet_5_0_rules_0_use_0_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./map-container.vue?vue&type=script&lang=js& */ "./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=script&lang=js&");
+ /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_babel_loader_lib_index_js_clonedRuleSet_5_0_rules_0_use_0_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_0__.default); 
+
+/***/ }),
+
 /***/ "./front-end/javascript/components/vehicle-table.vue?vue&type=script&lang=js&":
 /*!************************************************************************************!*\
   !*** ./front-end/javascript/components/vehicle-table.vue?vue&type=script&lang=js& ***!
@@ -9748,6 +12588,32 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var _node_modules_babel_loader_lib_index_js_clonedRuleSet_5_0_rules_0_use_0_node_modules_vue_loader_lib_index_js_vue_loader_options_vehicle_table_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./vehicle-table.vue?vue&type=script&lang=js& */ "./node_modules/babel-loader/lib/index.js??clonedRuleSet-5[0].rules[0].use[0]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/vehicle-table.vue?vue&type=script&lang=js&");
  /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (_node_modules_babel_loader_lib_index_js_clonedRuleSet_5_0_rules_0_use_0_node_modules_vue_loader_lib_index_js_vue_loader_options_vehicle_table_vue_vue_type_script_lang_js___WEBPACK_IMPORTED_MODULE_0__.default); 
+
+/***/ }),
+
+/***/ "./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css&":
+/*!*********************************************************************************************************************!*\
+  !*** ./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css& ***!
+  \*********************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _node_modules_laravel_mix_node_modules_style_loader_dist_cjs_js_node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_api_token_form_vue_vue_type_style_index_0_id_0fc010f0_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!../../../node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!../../../node_modules/vue-loader/lib/loaders/stylePostLoader.js!../../../node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css& */ "./node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/api-token-form.vue?vue&type=style&index=0&id=0fc010f0&scoped=true&lang=css&");
+
+
+/***/ }),
+
+/***/ "./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css&":
+/*!********************************************************************************************************************!*\
+  !*** ./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css& ***!
+  \********************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var _node_modules_laravel_mix_node_modules_style_loader_dist_cjs_js_node_modules_css_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_1_node_modules_vue_loader_lib_loaders_stylePostLoader_js_node_modules_postcss_loader_dist_cjs_js_clonedRuleSet_9_0_rules_0_use_2_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_style_index_0_id_956f3afa_scoped_true_lang_css___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!../../../node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!../../../node_modules/vue-loader/lib/loaders/stylePostLoader.js!../../../node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css& */ "./node_modules/laravel-mix/node_modules/style-loader/dist/cjs.js!./node_modules/css-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[1]!./node_modules/vue-loader/lib/loaders/stylePostLoader.js!./node_modules/postcss-loader/dist/cjs.js??clonedRuleSet-9[0].rules[0].use[2]!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=style&index=0&id=956f3afa&scoped=true&lang=css&");
+
 
 /***/ }),
 
@@ -9798,6 +12664,40 @@ __webpack_require__.r(__webpack_exports__);
 
 /***/ }),
 
+/***/ "./front-end/javascript/components/date-selection-form.vue?vue&type=template&id=f5667152&scoped=true&":
+/*!************************************************************************************************************!*\
+  !*** ./front-end/javascript/components/date-selection-form.vue?vue&type=template&id=f5667152&scoped=true& ***!
+  \************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "render": () => (/* reexport safe */ _node_modules_vue_loader_lib_loaders_templateLoader_js_vue_loader_options_node_modules_vue_loader_lib_index_js_vue_loader_options_date_selection_form_vue_vue_type_template_id_f5667152_scoped_true___WEBPACK_IMPORTED_MODULE_0__.render),
+/* harmony export */   "staticRenderFns": () => (/* reexport safe */ _node_modules_vue_loader_lib_loaders_templateLoader_js_vue_loader_options_node_modules_vue_loader_lib_index_js_vue_loader_options_date_selection_form_vue_vue_type_template_id_f5667152_scoped_true___WEBPACK_IMPORTED_MODULE_0__.staticRenderFns)
+/* harmony export */ });
+/* harmony import */ var _node_modules_vue_loader_lib_loaders_templateLoader_js_vue_loader_options_node_modules_vue_loader_lib_index_js_vue_loader_options_date_selection_form_vue_vue_type_template_id_f5667152_scoped_true___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./date-selection-form.vue?vue&type=template&id=f5667152&scoped=true& */ "./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/date-selection-form.vue?vue&type=template&id=f5667152&scoped=true&");
+
+
+/***/ }),
+
+/***/ "./front-end/javascript/components/map-container.vue?vue&type=template&id=956f3afa&scoped=true&":
+/*!******************************************************************************************************!*\
+  !*** ./front-end/javascript/components/map-container.vue?vue&type=template&id=956f3afa&scoped=true& ***!
+  \******************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "render": () => (/* reexport safe */ _node_modules_vue_loader_lib_loaders_templateLoader_js_vue_loader_options_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_template_id_956f3afa_scoped_true___WEBPACK_IMPORTED_MODULE_0__.render),
+/* harmony export */   "staticRenderFns": () => (/* reexport safe */ _node_modules_vue_loader_lib_loaders_templateLoader_js_vue_loader_options_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_template_id_956f3afa_scoped_true___WEBPACK_IMPORTED_MODULE_0__.staticRenderFns)
+/* harmony export */ });
+/* harmony import */ var _node_modules_vue_loader_lib_loaders_templateLoader_js_vue_loader_options_node_modules_vue_loader_lib_index_js_vue_loader_options_map_container_vue_vue_type_template_id_956f3afa_scoped_true___WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! -!../../../node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!../../../node_modules/vue-loader/lib/index.js??vue-loader-options!./map-container.vue?vue&type=template&id=956f3afa&scoped=true& */ "./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=template&id=956f3afa&scoped=true&");
+
+
+/***/ }),
+
 /***/ "./front-end/javascript/components/vehicle-table.vue?vue&type=template&id=71a5c8a0&scoped=true&":
 /*!******************************************************************************************************!*\
   !*** ./front-end/javascript/components/vehicle-table.vue?vue&type=template&id=71a5c8a0&scoped=true& ***!
@@ -9844,12 +12744,36 @@ var render = function() {
       _c("div", { staticClass: "row" }, [
         _c(
           "div",
-          { staticClass: "col" },
-          [_c("vehicle-table", { attrs: { data: _vm.vehicleLatestData } })],
+          { staticClass: "col gap-3" },
+          [
+            _c("vehicle-table", {
+              attrs: { data: _vm.vehicleLatestData },
+              on: { "vehicle-selected": _vm.onVehicleSelected }
+            }),
+            _vm._v(" "),
+            _c("date-selection-form", {
+              attrs: {
+                "api-token": _vm.apiToken,
+                "active-vehicle": _vm.activeVehicle
+              }
+            })
+          ],
           1
         ),
         _vm._v(" "),
-        _c("div", { staticClass: "col" })
+        _c(
+          "div",
+          { staticClass: "col" },
+          [
+            _c("map-container", {
+              attrs: {
+                "vehicle-list": _vm.vehicleLatestData,
+                "active-vehicle": _vm.activeVehicle
+              }
+            })
+          ],
+          1
+        )
       ])
     ],
     1
@@ -9895,7 +12819,7 @@ var render = function() {
         _c(
           "label",
           { staticClass: "input-group-text", attrs: { for: "api-key" } },
-          [_vm._v("API key")]
+          [_vm._v("API key:")]
         ),
         _vm._v(" "),
         _c("input", {
@@ -9946,6 +12870,134 @@ render._withStripped = true
 
 /***/ }),
 
+/***/ "./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/date-selection-form.vue?vue&type=template&id=f5667152&scoped=true&":
+/*!***************************************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/date-selection-form.vue?vue&type=template&id=f5667152&scoped=true& ***!
+  \***************************************************************************************************************************************************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "render": () => (/* binding */ render),
+/* harmony export */   "staticRenderFns": () => (/* binding */ staticRenderFns)
+/* harmony export */ });
+var render = function() {
+  var _vm = this
+  var _h = _vm.$createElement
+  var _c = _vm._self._c || _h
+  return _vm.canDisplayForm()
+    ? _c(
+        "form",
+        {
+          staticClass: "row g-3",
+          attrs: { id: "date-selection-form", novalidate: "" },
+          on: {
+            submit: function($event) {
+              $event.preventDefault()
+              return _vm.onSubmit.apply(null, arguments)
+            }
+          }
+        },
+        [
+          _c("div", { staticClass: "input-group has-validation" }, [
+            _c(
+              "label",
+              {
+                staticClass: "input-group-text",
+                attrs: { for: "selected-date" }
+              },
+              [_vm._v("Date:")]
+            ),
+            _vm._v(" "),
+            _c("input", {
+              directives: [
+                {
+                  name: "model",
+                  rawName: "v-model",
+                  value: _vm.date,
+                  expression: "date"
+                }
+              ],
+              staticClass: "form-control",
+              class: { "is-invalid": _vm.isInvalid },
+              attrs: {
+                type: "date",
+                id: "selected-date",
+                name: "selected-date",
+                placeholder: "(api key goes here)",
+                required: ""
+              },
+              domProps: { value: _vm.date },
+              on: {
+                input: function($event) {
+                  if ($event.target.composing) {
+                    return
+                  }
+                  _vm.date = $event.target.value
+                }
+              }
+            }),
+            _vm._v(" "),
+            _c("input", {
+              staticClass: "btn btn-primary",
+              attrs: { type: "submit", value: "GO" }
+            }),
+            _vm._v(" "),
+            _c("div", { staticClass: "invalid-feedback" }, [
+              _vm._v("\n      " + _vm._s(this.error) + "\n    ")
+            ])
+          ])
+        ]
+      )
+    : _c(
+        "div",
+        { staticClass: "alert alert-secondary", attrs: { role: "alert" } },
+        [_vm._v("\n  Please select a vehicle to see more data.\n")]
+      )
+}
+var staticRenderFns = []
+render._withStripped = true
+
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=template&id=956f3afa&scoped=true&":
+/*!*********************************************************************************************************************************************************************************************************************************************!*\
+  !*** ./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/map-container.vue?vue&type=template&id=956f3afa&scoped=true& ***!
+  \*********************************************************************************************************************************************************************************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "render": () => (/* binding */ render),
+/* harmony export */   "staticRenderFns": () => (/* binding */ staticRenderFns)
+/* harmony export */ });
+var render = function() {
+  var _vm = this
+  var _h = _vm.$createElement
+  var _c = _vm._self._c || _h
+  return _c(
+    "gmaps-map",
+    { attrs: { id: "map", options: _vm.mapOptions } },
+    _vm._l(_vm.vehicleList, function(vehicle) {
+      return _c("gmaps-marker", {
+        key: vehicle.objectId,
+        attrs: { position: { lat: vehicle.latitude, lng: vehicle.longitude } }
+      })
+    }),
+    1
+  )
+}
+var staticRenderFns = []
+render._withStripped = true
+
+
+
+/***/ }),
+
 /***/ "./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/vehicle-table.vue?vue&type=template&id=71a5c8a0&scoped=true&":
 /*!*********************************************************************************************************************************************************************************************************************************************!*\
   !*** ./node_modules/vue-loader/lib/loaders/templateLoader.js??vue-loader-options!./node_modules/vue-loader/lib/index.js??vue-loader-options!./front-end/javascript/components/vehicle-table.vue?vue&type=template&id=71a5c8a0&scoped=true& ***!
@@ -9962,35 +13014,39 @@ var render = function() {
   var _vm = this
   var _h = _vm.$createElement
   var _c = _vm._self._c || _h
-  return _c("table", { staticClass: "table table-bordered" }, [
-    _vm._m(0),
-    _vm._v(" "),
-    _c(
-      "tbody",
-      _vm._l(_vm.data, function(vehicle) {
-        return _c(
-          "tr",
-          {
-            staticClass: "vehicle-row",
-            class: { "table-active": _vm.selectedId === vehicle.name },
-            on: {
-              click: function($event) {
-                return _vm.onClickEvent(vehicle)
+  return _c(
+    "table",
+    { staticClass: "table table-bordered", attrs: { id: "vehicle-table" } },
+    [
+      _vm._m(0),
+      _vm._v(" "),
+      _c(
+        "tbody",
+        _vm._l(_vm.data, function(vehicle) {
+          return _c(
+            "tr",
+            {
+              staticClass: "vehicle-row",
+              class: { "table-active": _vm.selectedId === vehicle.name },
+              on: {
+                click: function($event) {
+                  return _vm.onClickEvent(vehicle)
+                }
               }
-            }
-          },
-          [
-            _c("td", [_vm._v(_vm._s(vehicle.name))]),
-            _vm._v(" "),
-            _c("td", [
-              _vm._v(_vm._s(_vm.getRelativeTime(new Date(vehicle.timestamp))))
-            ])
-          ]
-        )
-      }),
-      0
-    )
-  ])
+            },
+            [
+              _c("td", [_vm._v(_vm._s(vehicle.name))]),
+              _vm._v(" "),
+              _c("td", [
+                _vm._v(_vm._s(_vm.getRelativeTime(new Date(vehicle.timestamp))))
+              ])
+            ]
+          )
+        }),
+        0
+      )
+    ]
+  )
 }
 var staticRenderFns = [
   function() {
@@ -10121,6 +13177,640 @@ function normalizeComponent (
     options: options
   }
 }
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Emit.js":
+/*!********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Emit.js ***!
+  \********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Emit": () => (/* binding */ Emit)
+/* harmony export */ });
+var __spreadArrays = (undefined && undefined.__spreadArrays) || function () {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
+// Code copied from Vue/src/shared/util.js
+var hyphenateRE = /\B([A-Z])/g;
+var hyphenate = function (str) { return str.replace(hyphenateRE, '-$1').toLowerCase(); };
+/**
+ * decorator of an event-emitter function
+ * @param  event The name of the event
+ * @return MethodDecorator
+ */
+function Emit(event) {
+    return function (_target, propertyKey, descriptor) {
+        var key = hyphenate(propertyKey);
+        var original = descriptor.value;
+        descriptor.value = function emitter() {
+            var _this = this;
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            var emit = function (returnValue) {
+                var emitName = event || key;
+                if (returnValue === undefined) {
+                    if (args.length === 0) {
+                        _this.$emit(emitName);
+                    }
+                    else if (args.length === 1) {
+                        _this.$emit(emitName, args[0]);
+                    }
+                    else {
+                        _this.$emit.apply(_this, __spreadArrays([emitName], args));
+                    }
+                }
+                else {
+                    args.unshift(returnValue);
+                    _this.$emit.apply(_this, __spreadArrays([emitName], args));
+                }
+            };
+            var returnValue = original.apply(this, args);
+            if (isPromise(returnValue)) {
+                returnValue.then(emit);
+            }
+            else {
+                emit(returnValue);
+            }
+            return returnValue;
+        };
+    };
+}
+function isPromise(obj) {
+    return obj instanceof Promise || (obj && typeof obj.then === 'function');
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Inject.js":
+/*!**********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Inject.js ***!
+  \**********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Inject": () => (/* binding */ Inject)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+
+/**
+ * decorator of an inject
+ * @param from key
+ * @return PropertyDecorator
+ */
+function Inject(options) {
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_0__.createDecorator)(function (componentOptions, key) {
+        if (typeof componentOptions.inject === 'undefined') {
+            componentOptions.inject = {};
+        }
+        if (!Array.isArray(componentOptions.inject)) {
+            componentOptions.inject[key] = options || key;
+        }
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/InjectReactive.js":
+/*!******************************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/InjectReactive.js ***!
+  \******************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "InjectReactive": () => (/* binding */ InjectReactive)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/provideInject */ "./node_modules/vue-property-decorator/lib/helpers/provideInject.js");
+
+
+/**
+ * decorator of a reactive inject
+ * @param from key
+ * @return PropertyDecorator
+ */
+function InjectReactive(options) {
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, key) {
+        if (typeof componentOptions.inject === 'undefined') {
+            componentOptions.inject = {};
+        }
+        if (!Array.isArray(componentOptions.inject)) {
+            var fromKey_1 = !!options ? options.from || options : key;
+            var defaultVal_1 = (!!options && options.default) || undefined;
+            if (!componentOptions.computed)
+                componentOptions.computed = {};
+            componentOptions.computed[key] = function () {
+                var obj = this[_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.reactiveInjectKey];
+                return obj ? obj[fromKey_1] : defaultVal_1;
+            };
+            componentOptions.inject[_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.reactiveInjectKey] = _helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.reactiveInjectKey;
+        }
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Model.js":
+/*!*********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Model.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Model": () => (/* binding */ Model)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_metadata__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/metadata */ "./node_modules/vue-property-decorator/lib/helpers/metadata.js");
+
+
+/**
+ * decorator of model
+ * @param  event event name
+ * @param options options
+ * @return PropertyDecorator
+ */
+function Model(event, options) {
+    if (options === void 0) { options = {}; }
+    return function (target, key) {
+        (0,_helpers_metadata__WEBPACK_IMPORTED_MODULE_0__.applyMetadata)(options, target, key);
+        (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, k) {
+            ;
+            (componentOptions.props || (componentOptions.props = {}))[k] = options;
+            componentOptions.model = { prop: k, event: event || k };
+        })(target, key);
+    };
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/ModelSync.js":
+/*!*************************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/ModelSync.js ***!
+  \*************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "ModelSync": () => (/* binding */ ModelSync)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_metadata__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/metadata */ "./node_modules/vue-property-decorator/lib/helpers/metadata.js");
+
+
+/**
+ * decorator of synced model and prop
+ * @param propName the name to interface with from outside, must be different from decorated property
+ * @param  event event name
+ * @param options options
+ * @return PropertyDecorator
+ */
+function ModelSync(propName, event, options) {
+    if (options === void 0) { options = {}; }
+    return function (target, key) {
+        (0,_helpers_metadata__WEBPACK_IMPORTED_MODULE_0__.applyMetadata)(options, target, key);
+        (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, k) {
+            ;
+            (componentOptions.props || (componentOptions.props = {}))[propName] = options;
+            componentOptions.model = { prop: propName, event: event || k };
+            (componentOptions.computed || (componentOptions.computed = {}))[k] = {
+                get: function () {
+                    return this[propName];
+                },
+                set: function (value) {
+                    // @ts-ignore
+                    this.$emit(event, value);
+                },
+            };
+        })(target, key);
+    };
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Prop.js":
+/*!********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Prop.js ***!
+  \********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Prop": () => (/* binding */ Prop)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_metadata__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/metadata */ "./node_modules/vue-property-decorator/lib/helpers/metadata.js");
+
+
+/**
+ * decorator of a prop
+ * @param  options the options for the prop
+ * @return PropertyDecorator | void
+ */
+function Prop(options) {
+    if (options === void 0) { options = {}; }
+    return function (target, key) {
+        (0,_helpers_metadata__WEBPACK_IMPORTED_MODULE_0__.applyMetadata)(options, target, key);
+        (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, k) {
+            ;
+            (componentOptions.props || (componentOptions.props = {}))[k] = options;
+        })(target, key);
+    };
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/PropSync.js":
+/*!************************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/PropSync.js ***!
+  \************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "PropSync": () => (/* binding */ PropSync)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_metadata__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/metadata */ "./node_modules/vue-property-decorator/lib/helpers/metadata.js");
+
+
+/**
+ * decorator of a synced prop
+ * @param propName the name to interface with from outside, must be different from decorated property
+ * @param options the options for the synced prop
+ * @return PropertyDecorator | void
+ */
+function PropSync(propName, options) {
+    if (options === void 0) { options = {}; }
+    return function (target, key) {
+        (0,_helpers_metadata__WEBPACK_IMPORTED_MODULE_0__.applyMetadata)(options, target, key);
+        (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, k) {
+            ;
+            (componentOptions.props || (componentOptions.props = {}))[propName] = options;
+            (componentOptions.computed || (componentOptions.computed = {}))[k] = {
+                get: function () {
+                    return this[propName];
+                },
+                set: function (value) {
+                    this.$emit("update:" + propName, value);
+                },
+            };
+        })(target, key);
+    };
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Provide.js":
+/*!***********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Provide.js ***!
+  \***********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Provide": () => (/* binding */ Provide)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/provideInject */ "./node_modules/vue-property-decorator/lib/helpers/provideInject.js");
+
+
+/**
+ * decorator of a provide
+ * @param key key
+ * @return PropertyDecorator | void
+ */
+function Provide(key) {
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, k) {
+        var provide = componentOptions.provide;
+        (0,_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.inheritInjected)(componentOptions);
+        if ((0,_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.needToProduceProvide)(provide)) {
+            provide = componentOptions.provide = (0,_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.produceProvide)(provide);
+        }
+        provide.managed[k] = key || k;
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/ProvideReactive.js":
+/*!*******************************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/ProvideReactive.js ***!
+  \*******************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "ProvideReactive": () => (/* binding */ ProvideReactive)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../helpers/provideInject */ "./node_modules/vue-property-decorator/lib/helpers/provideInject.js");
+
+
+/**
+ * decorator of a reactive provide
+ * @param key key
+ * @return PropertyDecorator | void
+ */
+function ProvideReactive(key) {
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_1__.createDecorator)(function (componentOptions, k) {
+        var provide = componentOptions.provide;
+        (0,_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.inheritInjected)(componentOptions);
+        if ((0,_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.needToProduceProvide)(provide)) {
+            provide = componentOptions.provide = (0,_helpers_provideInject__WEBPACK_IMPORTED_MODULE_0__.produceProvide)(provide);
+        }
+        provide.managedReactive[k] = key || k;
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Ref.js":
+/*!*******************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Ref.js ***!
+  \*******************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Ref": () => (/* binding */ Ref)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+
+/**
+ * decorator of a ref prop
+ * @param refKey the ref key defined in template
+ */
+function Ref(refKey) {
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_0__.createDecorator)(function (options, key) {
+        options.computed = options.computed || {};
+        options.computed[key] = {
+            cache: false,
+            get: function () {
+                return this.$refs[refKey || key];
+            },
+        };
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/VModel.js":
+/*!**********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/VModel.js ***!
+  \**********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "VModel": () => (/* binding */ VModel)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+
+/**
+ * decorator for capturings v-model binding to component
+ * @param options the options for the prop
+ */
+function VModel(options) {
+    if (options === void 0) { options = {}; }
+    var valueKey = 'value';
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_0__.createDecorator)(function (componentOptions, key) {
+        ;
+        (componentOptions.props || (componentOptions.props = {}))[valueKey] = options;
+        (componentOptions.computed || (componentOptions.computed = {}))[key] = {
+            get: function () {
+                return this[valueKey];
+            },
+            set: function (value) {
+                this.$emit('input', value);
+            },
+        };
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/decorators/Watch.js":
+/*!*********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/decorators/Watch.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Watch": () => (/* binding */ Watch)
+/* harmony export */ });
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+
+/**
+ * decorator of a watch function
+ * @param  path the path or the expression to observe
+ * @param  WatchOption
+ * @return MethodDecorator
+ */
+function Watch(path, options) {
+    if (options === void 0) { options = {}; }
+    var _a = options.deep, deep = _a === void 0 ? false : _a, _b = options.immediate, immediate = _b === void 0 ? false : _b;
+    return (0,vue_class_component__WEBPACK_IMPORTED_MODULE_0__.createDecorator)(function (componentOptions, handler) {
+        if (typeof componentOptions.watch !== 'object') {
+            componentOptions.watch = Object.create(null);
+        }
+        var watch = componentOptions.watch;
+        if (typeof watch[path] === 'object' && !Array.isArray(watch[path])) {
+            watch[path] = [watch[path]];
+        }
+        else if (typeof watch[path] === 'undefined') {
+            watch[path] = [];
+        }
+        watch[path].push({ handler: handler, deep: deep, immediate: immediate });
+    });
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/helpers/metadata.js":
+/*!*********************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/helpers/metadata.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "applyMetadata": () => (/* binding */ applyMetadata)
+/* harmony export */ });
+/** @see {@link https://github.com/vuejs/vue-class-component/blob/master/src/reflect.ts} */
+var reflectMetadataIsSupported = typeof Reflect !== 'undefined' && typeof Reflect.getMetadata !== 'undefined';
+function applyMetadata(options, target, key) {
+    if (reflectMetadataIsSupported) {
+        if (!Array.isArray(options) &&
+            typeof options !== 'function' &&
+            !options.hasOwnProperty('type') &&
+            typeof options.type === 'undefined') {
+            var type = Reflect.getMetadata('design:type', target, key);
+            if (type !== Object) {
+                options.type = type;
+            }
+        }
+    }
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/helpers/provideInject.js":
+/*!**************************************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/helpers/provideInject.js ***!
+  \**************************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "needToProduceProvide": () => (/* binding */ needToProduceProvide),
+/* harmony export */   "produceProvide": () => (/* binding */ produceProvide),
+/* harmony export */   "reactiveInjectKey": () => (/* binding */ reactiveInjectKey),
+/* harmony export */   "inheritInjected": () => (/* binding */ inheritInjected)
+/* harmony export */ });
+function needToProduceProvide(original) {
+    return (typeof original !== 'function' ||
+        (!original.managed && !original.managedReactive));
+}
+function produceProvide(original) {
+    var provide = function () {
+        var _this = this;
+        var rv = typeof original === 'function' ? original.call(this) : original;
+        rv = Object.create(rv || null);
+        // set reactive services (propagates previous services if necessary)
+        rv[reactiveInjectKey] = Object.create(this[reactiveInjectKey] || {});
+        for (var i in provide.managed) {
+            rv[provide.managed[i]] = this[i];
+        }
+        var _loop_1 = function (i) {
+            rv[provide.managedReactive[i]] = this_1[i]; // Duplicates the behavior of `@Provide`
+            Object.defineProperty(rv[reactiveInjectKey], provide.managedReactive[i], {
+                enumerable: true,
+                configurable: true,
+                get: function () { return _this[i]; },
+            });
+        };
+        var this_1 = this;
+        for (var i in provide.managedReactive) {
+            _loop_1(i);
+        }
+        return rv;
+    };
+    provide.managed = {};
+    provide.managedReactive = {};
+    return provide;
+}
+/** Used for keying reactive provide/inject properties */
+var reactiveInjectKey = '__reactiveInject__';
+function inheritInjected(componentOptions) {
+    // inject parent reactive services (if any)
+    if (!Array.isArray(componentOptions.inject)) {
+        componentOptions.inject = componentOptions.inject || {};
+        componentOptions.inject[reactiveInjectKey] = {
+            from: reactiveInjectKey,
+            default: {},
+        };
+    }
+}
+
+
+/***/ }),
+
+/***/ "./node_modules/vue-property-decorator/lib/index.js":
+/*!**********************************************************!*\
+  !*** ./node_modules/vue-property-decorator/lib/index.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "Component": () => (/* reexport safe */ vue_class_component__WEBPACK_IMPORTED_MODULE_0__.default),
+/* harmony export */   "Vue": () => (/* reexport safe */ vue__WEBPACK_IMPORTED_MODULE_1__.default),
+/* harmony export */   "Mixins": () => (/* reexport safe */ vue_class_component__WEBPACK_IMPORTED_MODULE_0__.mixins),
+/* harmony export */   "Emit": () => (/* reexport safe */ _decorators_Emit__WEBPACK_IMPORTED_MODULE_2__.Emit),
+/* harmony export */   "Inject": () => (/* reexport safe */ _decorators_Inject__WEBPACK_IMPORTED_MODULE_3__.Inject),
+/* harmony export */   "InjectReactive": () => (/* reexport safe */ _decorators_InjectReactive__WEBPACK_IMPORTED_MODULE_4__.InjectReactive),
+/* harmony export */   "Model": () => (/* reexport safe */ _decorators_Model__WEBPACK_IMPORTED_MODULE_5__.Model),
+/* harmony export */   "ModelSync": () => (/* reexport safe */ _decorators_ModelSync__WEBPACK_IMPORTED_MODULE_6__.ModelSync),
+/* harmony export */   "Prop": () => (/* reexport safe */ _decorators_Prop__WEBPACK_IMPORTED_MODULE_7__.Prop),
+/* harmony export */   "PropSync": () => (/* reexport safe */ _decorators_PropSync__WEBPACK_IMPORTED_MODULE_8__.PropSync),
+/* harmony export */   "Provide": () => (/* reexport safe */ _decorators_Provide__WEBPACK_IMPORTED_MODULE_9__.Provide),
+/* harmony export */   "ProvideReactive": () => (/* reexport safe */ _decorators_ProvideReactive__WEBPACK_IMPORTED_MODULE_10__.ProvideReactive),
+/* harmony export */   "Ref": () => (/* reexport safe */ _decorators_Ref__WEBPACK_IMPORTED_MODULE_11__.Ref),
+/* harmony export */   "VModel": () => (/* reexport safe */ _decorators_VModel__WEBPACK_IMPORTED_MODULE_12__.VModel),
+/* harmony export */   "Watch": () => (/* reexport safe */ _decorators_Watch__WEBPACK_IMPORTED_MODULE_13__.Watch)
+/* harmony export */ });
+/* harmony import */ var vue__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue */ "./node_modules/vue/dist/vue.esm.js");
+/* harmony import */ var vue_class_component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue-class-component */ "./node_modules/vue-class-component/dist/vue-class-component.esm.js");
+/* harmony import */ var _decorators_Emit__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./decorators/Emit */ "./node_modules/vue-property-decorator/lib/decorators/Emit.js");
+/* harmony import */ var _decorators_Inject__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./decorators/Inject */ "./node_modules/vue-property-decorator/lib/decorators/Inject.js");
+/* harmony import */ var _decorators_InjectReactive__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./decorators/InjectReactive */ "./node_modules/vue-property-decorator/lib/decorators/InjectReactive.js");
+/* harmony import */ var _decorators_Model__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./decorators/Model */ "./node_modules/vue-property-decorator/lib/decorators/Model.js");
+/* harmony import */ var _decorators_ModelSync__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./decorators/ModelSync */ "./node_modules/vue-property-decorator/lib/decorators/ModelSync.js");
+/* harmony import */ var _decorators_Prop__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./decorators/Prop */ "./node_modules/vue-property-decorator/lib/decorators/Prop.js");
+/* harmony import */ var _decorators_PropSync__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./decorators/PropSync */ "./node_modules/vue-property-decorator/lib/decorators/PropSync.js");
+/* harmony import */ var _decorators_Provide__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ./decorators/Provide */ "./node_modules/vue-property-decorator/lib/decorators/Provide.js");
+/* harmony import */ var _decorators_ProvideReactive__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! ./decorators/ProvideReactive */ "./node_modules/vue-property-decorator/lib/decorators/ProvideReactive.js");
+/* harmony import */ var _decorators_Ref__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! ./decorators/Ref */ "./node_modules/vue-property-decorator/lib/decorators/Ref.js");
+/* harmony import */ var _decorators_VModel__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(/*! ./decorators/VModel */ "./node_modules/vue-property-decorator/lib/decorators/VModel.js");
+/* harmony import */ var _decorators_Watch__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(/*! ./decorators/Watch */ "./node_modules/vue-property-decorator/lib/decorators/Watch.js");
+/** vue-property-decorator verson 9.1.2 MIT LICENSE copyright 2020 kaorun343 */
+/// <reference types='reflect-metadata'/>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /***/ }),
@@ -22165,6 +25855,3231 @@ function getOuterHTML (el) {
 Vue.compile = compileToFunctions;
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (Vue);
+
+
+/***/ }),
+
+/***/ "./node_modules/x5-gmaps/dist/x5-gmaps.esm.js":
+/*!****************************************************!*\
+  !*** ./node_modules/x5-gmaps/dist/x5-gmaps.esm.js ***!
+  \****************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__),
+/* harmony export */   "gmaps": () => (/* binding */ gmaps),
+/* harmony export */   "gmapsCircle": () => (/* binding */ GmapsCircle),
+/* harmony export */   "gmapsCluster": () => (/* binding */ __vue_component__$1),
+/* harmony export */   "gmapsData": () => (/* binding */ GmapsData),
+/* harmony export */   "gmapsDataGeoJson": () => (/* binding */ GmapsDataGeoJson),
+/* harmony export */   "gmapsHeatmap": () => (/* binding */ GmapsHeatmap),
+/* harmony export */   "gmapsInfoWindow": () => (/* binding */ GmapsInfoWindow),
+/* harmony export */   "gmapsMap": () => (/* binding */ __vue_component__$3),
+/* harmony export */   "gmapsMarker": () => (/* binding */ GmapsMarker),
+/* harmony export */   "gmapsPolygon": () => (/* binding */ GmapsPolygon),
+/* harmony export */   "gmapsPolyline": () => (/* binding */ GmapsPolyline),
+/* harmony export */   "gmapsPopup": () => (/* binding */ __vue_component__),
+/* harmony export */   "gmapsRectangle": () => (/* binding */ GmapsRectangle),
+/* harmony export */   "install": () => (/* binding */ install)
+/* harmony export */ });
+/* harmony import */ var vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! vue-property-decorator */ "./node_modules/vue-property-decorator/lib/index.js");
+
+
+// Google Maps base URL
+var baseURL = 'https://maps.googleapis.com/maps/api/js'; // Google Maps full URL with query parameters
+
+var genURL = function genURL(options) {
+  return "".concat(baseURL, "?").concat(options);
+}; // All promises that need to be resolved once map is loaded
+
+
+var promises = []; // onError callback for Google Maps fail
+
+var onError = function onError(e) {
+  return promises.forEach(function (p) {
+    return p.reject(e);
+  });
+}; // onLoad callback for Google Maps load
+
+
+var onLoad = function onLoad() {
+  return promises.forEach(function (p) {
+    return p.resolve(globalThis.google.maps);
+  });
+}; // Insert the Google Maps script into the DOM
+
+
+var loadAPI = function loadAPI(options) {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = genURL(options);
+
+  script.onerror = function () {
+    return onError(new Error('Error loading script'));
+  };
+
+  script.onload = function () {
+    return onLoad();
+  };
+
+  var head = document.querySelector('head');
+  if (head) head.appendChild(script);
+}; // Convert options object into URI parameters
+
+
+var uriX5OptionsInterface = function uriX5OptionsInterface(options) {
+  return "key=".concat(options.key, "&libraries=").concat(options.libraries.join(','));
+}; // Check if loaded
+
+
+var loaded = function loaded() {
+  return !!globalThis.google && !!globalThis.google.maps;
+}; // Loading flag to allow for multiple inits
+
+
+var loading = false; // Exported promise to get map
+
+var gmaps = function gmaps() {
+  // Early return if map already loaded
+  if (loaded()) return Promise.resolve(globalThis.google.maps); // If not loading, it was not initialised
+
+  if (!loading) throw new Error('x5GMaps :: Plugin not initialised'); // Return promise and save for resolution when map load completes
+
+  return new Promise(function (resolve, reject) {
+    return promises.push({
+      resolve: resolve,
+      reject: reject
+    });
+  });
+}; // Exported initialisation
+
+
+var init = function init(options) {
+  // Early return if map already loaded
+  if (loaded()) throw new Error('x5GMaps :: Plugin already initialised'); // Initiate map loading with given key, any options, and a promise resolve callback
+
+  loadAPI(uriX5OptionsInterface(options)); // Map is still loading
+
+  loading = true; // Give up if map takes too long
+
+  setTimeout(function () {
+    if (!loaded()) onError(new Error('Loading timed out'));
+  }, 5000);
+};
+
+function ownKeys(object, enumerableOnly) {
+  var keys = Object.keys(object);
+
+  if (Object.getOwnPropertySymbols) {
+    var symbols = Object.getOwnPropertySymbols(object);
+
+    if (enumerableOnly) {
+      symbols = symbols.filter(function (sym) {
+        return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+      });
+    }
+
+    keys.push.apply(keys, symbols);
+  }
+
+  return keys;
+}
+
+function _objectSpread2(target) {
+  for (var i = 1; i < arguments.length; i++) {
+    var source = arguments[i] != null ? arguments[i] : {};
+
+    if (i % 2) {
+      ownKeys(Object(source), true).forEach(function (key) {
+        _defineProperty(target, key, source[key]);
+      });
+    } else if (Object.getOwnPropertyDescriptors) {
+      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
+    } else {
+      ownKeys(Object(source)).forEach(function (key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+  }
+
+  return target;
+}
+
+function _classCallCheck(instance, Constructor) {
+  if (!(instance instanceof Constructor)) {
+    throw new TypeError("Cannot call a class as a function");
+  }
+}
+
+function _defineProperties(target, props) {
+  for (var i = 0; i < props.length; i++) {
+    var descriptor = props[i];
+    descriptor.enumerable = descriptor.enumerable || false;
+    descriptor.configurable = true;
+    if ("value" in descriptor) descriptor.writable = true;
+    Object.defineProperty(target, descriptor.key, descriptor);
+  }
+}
+
+function _createClass(Constructor, protoProps, staticProps) {
+  if (protoProps) _defineProperties(Constructor.prototype, protoProps);
+  if (staticProps) _defineProperties(Constructor, staticProps);
+  return Constructor;
+}
+
+function _defineProperty(obj, key, value) {
+  if (key in obj) {
+    Object.defineProperty(obj, key, {
+      value: value,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    });
+  } else {
+    obj[key] = value;
+  }
+
+  return obj;
+}
+
+function _inherits(subClass, superClass) {
+  if (typeof superClass !== "function" && superClass !== null) {
+    throw new TypeError("Super expression must either be null or a function");
+  }
+
+  subClass.prototype = Object.create(superClass && superClass.prototype, {
+    constructor: {
+      value: subClass,
+      writable: true,
+      configurable: true
+    }
+  });
+  if (superClass) _setPrototypeOf(subClass, superClass);
+}
+
+function _getPrototypeOf(o) {
+  _getPrototypeOf = Object.setPrototypeOf ? Object.getPrototypeOf : function _getPrototypeOf(o) {
+    return o.__proto__ || Object.getPrototypeOf(o);
+  };
+  return _getPrototypeOf(o);
+}
+
+function _setPrototypeOf(o, p) {
+  _setPrototypeOf = Object.setPrototypeOf || function _setPrototypeOf(o, p) {
+    o.__proto__ = p;
+    return o;
+  };
+
+  return _setPrototypeOf(o, p);
+}
+
+function _isNativeReflectConstruct() {
+  if (typeof Reflect === "undefined" || !Reflect.construct) return false;
+  if (Reflect.construct.sham) return false;
+  if (typeof Proxy === "function") return true;
+
+  try {
+    Boolean.prototype.valueOf.call(Reflect.construct(Boolean, [], function () {}));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function _assertThisInitialized(self) {
+  if (self === void 0) {
+    throw new ReferenceError("this hasn't been initialised - super() hasn't been called");
+  }
+
+  return self;
+}
+
+function _possibleConstructorReturn(self, call) {
+  if (call && (typeof call === "object" || typeof call === "function")) {
+    return call;
+  }
+
+  return _assertThisInitialized(self);
+}
+
+function _createSuper(Derived) {
+  var hasNativeReflectConstruct = _isNativeReflectConstruct();
+
+  return function _createSuperInternal() {
+    var Super = _getPrototypeOf(Derived),
+        result;
+
+    if (hasNativeReflectConstruct) {
+      var NewTarget = _getPrototypeOf(this).constructor;
+
+      result = Reflect.construct(Super, arguments, NewTarget);
+    } else {
+      result = Super.apply(this, arguments);
+    }
+
+    return _possibleConstructorReturn(this, result);
+  };
+}
+
+function _slicedToArray(arr, i) {
+  return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+}
+
+function _arrayWithHoles(arr) {
+  if (Array.isArray(arr)) return arr;
+}
+
+function _iterableToArrayLimit(arr, i) {
+  var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
+
+  if (_i == null) return;
+  var _arr = [];
+  var _n = true;
+  var _d = false;
+
+  var _s, _e;
+
+  try {
+    for (_i = _i.call(arr); !(_n = (_s = _i.next()).done); _n = true) {
+      _arr.push(_s.value);
+
+      if (i && _arr.length === i) break;
+    }
+  } catch (err) {
+    _d = true;
+    _e = err;
+  } finally {
+    try {
+      if (!_n && _i["return"] != null) _i["return"]();
+    } finally {
+      if (_d) throw _e;
+    }
+  }
+
+  return _arr;
+}
+
+function _unsupportedIterableToArray(o, minLen) {
+  if (!o) return;
+  if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+  var n = Object.prototype.toString.call(o).slice(8, -1);
+  if (n === "Object" && o.constructor) n = o.constructor.name;
+  if (n === "Map" || n === "Set") return Array.from(o);
+  if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+}
+
+function _arrayLikeToArray(arr, len) {
+  if (len == null || len > arr.length) len = arr.length;
+
+  for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+  return arr2;
+}
+
+function _nonIterableRest() {
+  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+
+function _initializerDefineProperty(target, property, descriptor, context) {
+  if (!descriptor) return;
+  Object.defineProperty(target, property, {
+    enumerable: descriptor.enumerable,
+    configurable: descriptor.configurable,
+    writable: descriptor.writable,
+    value: descriptor.initializer ? descriptor.initializer.call(context) : void 0
+  });
+}
+
+function _applyDecoratedDescriptor(target, property, decorators, descriptor, context) {
+  var desc = {};
+  Object.keys(descriptor).forEach(function (key) {
+    desc[key] = descriptor[key];
+  });
+  desc.enumerable = !!desc.enumerable;
+  desc.configurable = !!desc.configurable;
+
+  if ('value' in desc || desc.initializer) {
+    desc.writable = true;
+  }
+
+  desc = decorators.slice().reverse().reduce(function (desc, decorator) {
+    return decorator(target, property, desc) || desc;
+  }, desc);
+
+  if (context && desc.initializer !== void 0) {
+    desc.value = desc.initializer ? desc.initializer.call(context) : void 0;
+    desc.initializer = undefined;
+  }
+
+  if (desc.initializer === void 0) {
+    Object.defineProperty(target, property, desc);
+    desc = null;
+  }
+
+  return desc;
+}
+
+var _dec$c, _dec2$c, _dec3$c, _dec4$c, _class$c, _class2$c, _descriptor$c, _descriptor2$c, _descriptor3$c;
+var defaultOptions$1 = {
+  center: {
+    lat: -27.5,
+    lng: 153
+  },
+  zoom: 12
+};
+var GmapsMap = (_dec$c = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: function _default() {
+    return {};
+  }
+}), _dec2$c = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Provide)('getMap'), _dec3$c = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Provide)('handleError'), _dec4$c = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$c = (_class2$c = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsMap, _Vue);
+
+  var _super = _createSuper(GmapsMap);
+
+  function GmapsMap() {
+    var _this;
+
+    _classCallCheck(this, GmapsMap);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsMap');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor$c, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "error", null);
+
+    _defineProperty(_assertThisInitialized(_this), "loading", true);
+
+    _defineProperty(_assertThisInitialized(_this), "map", void 0);
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "provideMap", _descriptor2$c, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "handleError", _descriptor3$c, _assertThisInitialized(_this));
+
+    return _this;
+  }
+
+  _createClass(GmapsMap, [{
+    key: "getMap",
+    value: function getMap() {
+      if (this.map) return this.map;
+      throw new Error('Map not found.');
+    }
+  }, {
+    key: "_handleError",
+    value: function _handleError(e) {
+      this.error = e.message;
+    }
+  }, {
+    key: "optionsChanged",
+    value: function optionsChanged(newVal) {
+      if (this.map) this.map.setOptions(newVal);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      gmaps().then(function (maps) {
+        _this2.map = new maps.Map(_this2.$refs.gmap, _objectSpread2(_objectSpread2({}, defaultOptions$1), _this2.options));
+
+        _this2.$emit('mounted', _this2.map);
+
+        _this2.map.addListener('bounds_changed', function () {
+          return _this2.$emit('bounds-changed', _this2.map.getBounds());
+        });
+
+        _this2.map.addListener('center_changed', function () {
+          return _this2.$emit('center-changed', _this2.map.getCenter());
+        });
+
+        _this2.map.addListener('click', function (e) {
+          return _this2.$emit('click', e);
+        });
+
+        _this2.map.addListener('dblclick', function (e) {
+          return _this2.$emit('double-click', e);
+        });
+
+        _this2.map.addListener('rightclick', function (e) {
+          return _this2.$emit('right-click', e);
+        });
+
+        _this2.map.addListener('zoom_changed', function () {
+          return _this2.$emit('zoom-changed', _this2.map.getZoom());
+        }); // TODO: Remove in major release
+
+
+        _this2.map.addListener('bounds_changed', function () {
+          return _this2.$emit('boundsChanged', _this2.map.getBounds());
+        }); // eslint-disable-line
+
+
+        _this2.map.addListener('center_changed', function () {
+          return _this2.$emit('centerChanged', _this2.map.getCenter());
+        }); // eslint-disable-line
+
+
+        _this2.map.addListener('dblclick', function (e) {
+          return _this2.$emit('doubleClick', e);
+        }); // eslint-disable-line
+
+
+        _this2.map.addListener('rightclick', function (e) {
+          return _this2.$emit('rightClick', e);
+        }); // eslint-disable-line
+
+
+        _this2.map.addListener('zoom_changed', function () {
+          return _this2.$emit('zoomChanged', _this2.map.getZoom());
+        }); // eslint-disable-line
+
+
+        setTimeout(function () {
+          return _this2.loading = false;
+        }, 100);
+      }).catch(function (e) {
+        return _this2._handleError(e);
+      });
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.map) globalThis.google.maps.event.clearInstanceListeners(this.map);
+    }
+  }]);
+
+  return GmapsMap;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$c = _applyDecoratedDescriptor(_class2$c.prototype, "options", [_dec$c], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$c = _applyDecoratedDescriptor(_class2$c.prototype, "provideMap", [_dec2$c], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: function initializer() {
+    var _this3 = this;
+
+    return function () {
+      return _this3.getMap();
+    };
+  }
+}), _descriptor3$c = _applyDecoratedDescriptor(_class2$c.prototype, "handleError", [_dec3$c], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: function initializer() {
+    var _this4 = this;
+
+    return function (e) {
+      return _this4._handleError(e);
+    };
+  }
+}), _applyDecoratedDescriptor(_class2$c.prototype, "optionsChanged", [_dec4$c], Object.getOwnPropertyDescriptor(_class2$c.prototype, "optionsChanged"), _class2$c.prototype)), _class2$c)) || _class$c);
+
+function normalizeComponent(template, style, script, scopeId, isFunctionalTemplate, moduleIdentifier /* server only */, shadowMode, createInjector, createInjectorSSR, createInjectorShadow) {
+    if (typeof shadowMode !== 'boolean') {
+        createInjectorSSR = createInjector;
+        createInjector = shadowMode;
+        shadowMode = false;
+    }
+    // Vue.extend constructor export interop.
+    const options = typeof script === 'function' ? script.options : script;
+    // render functions
+    if (template && template.render) {
+        options.render = template.render;
+        options.staticRenderFns = template.staticRenderFns;
+        options._compiled = true;
+        // functional template
+        if (isFunctionalTemplate) {
+            options.functional = true;
+        }
+    }
+    // scopedId
+    if (scopeId) {
+        options._scopeId = scopeId;
+    }
+    let hook;
+    if (moduleIdentifier) {
+        // server build
+        hook = function (context) {
+            // 2.3 injection
+            context =
+                context || // cached call
+                    (this.$vnode && this.$vnode.ssrContext) || // stateful
+                    (this.parent && this.parent.$vnode && this.parent.$vnode.ssrContext); // functional
+            // 2.2 with runInNewContext: true
+            if (!context && typeof __VUE_SSR_CONTEXT__ !== 'undefined') {
+                context = __VUE_SSR_CONTEXT__;
+            }
+            // inject component styles
+            if (style) {
+                style.call(this, createInjectorSSR(context));
+            }
+            // register component module identifier for async chunk inference
+            if (context && context._registeredComponents) {
+                context._registeredComponents.add(moduleIdentifier);
+            }
+        };
+        // used by ssr in case component is cached and beforeCreate
+        // never gets called
+        options._ssrRegister = hook;
+    }
+    else if (style) {
+        hook = shadowMode
+            ? function (context) {
+                style.call(this, createInjectorShadow(context, this.$root.$options.shadowRoot));
+            }
+            : function (context) {
+                style.call(this, createInjector(context));
+            };
+    }
+    if (hook) {
+        if (options.functional) {
+            // register for functional component in vue file
+            const originalRender = options.render;
+            options.render = function renderWithStyleInjection(h, context) {
+                hook.call(context);
+                return originalRender(h, context);
+            };
+        }
+        else {
+            // inject component registration as beforeCreate hook
+            const existing = options.beforeCreate;
+            options.beforeCreate = existing ? [].concat(existing, hook) : [hook];
+        }
+    }
+    return script;
+}
+
+const isOldIE = typeof navigator !== 'undefined' &&
+    /msie [6-9]\\b/.test(navigator.userAgent.toLowerCase());
+function createInjector(context) {
+    return (id, style) => addStyle(id, style);
+}
+let HEAD;
+const styles = {};
+function addStyle(id, css) {
+    const group = isOldIE ? css.media || 'default' : id;
+    const style = styles[group] || (styles[group] = { ids: new Set(), styles: [] });
+    if (!style.ids.has(id)) {
+        style.ids.add(id);
+        let code = css.source;
+        if (css.map) {
+            // https://developer.chrome.com/devtools/docs/javascript-debugging
+            // this makes source maps inside style tags work properly in Chrome
+            code += '\n/*# sourceURL=' + css.map.sources[0] + ' */';
+            // http://stackoverflow.com/a/26603875
+            code +=
+                '\n/*# sourceMappingURL=data:application/json;base64,' +
+                    btoa(unescape(encodeURIComponent(JSON.stringify(css.map)))) +
+                    ' */';
+        }
+        if (!style.element) {
+            style.element = document.createElement('style');
+            style.element.type = 'text/css';
+            if (css.media)
+                style.element.setAttribute('media', css.media);
+            if (HEAD === undefined) {
+                HEAD = document.head || document.getElementsByTagName('head')[0];
+            }
+            HEAD.appendChild(style.element);
+        }
+        if ('styleSheet' in style.element) {
+            style.styles.push(code);
+            style.element.styleSheet.cssText = style.styles
+                .filter(Boolean)
+                .join('\n');
+        }
+        else {
+            const index = style.ids.size - 1;
+            const textNode = document.createTextNode(code);
+            const nodes = style.element.childNodes;
+            if (nodes[index])
+                style.element.removeChild(nodes[index]);
+            if (nodes.length)
+                style.element.insertBefore(textNode, nodes[index]);
+            else
+                style.element.appendChild(textNode);
+        }
+    }
+}
+
+/* script */
+var __vue_script__$3 = GmapsMap;
+/* template */
+
+var __vue_render__$3 = function __vue_render__() {
+  var _vm = this;
+
+  var _h = _vm.$createElement;
+
+  var _c = _vm._self._c || _h;
+
+  return _c('div', {
+    staticClass: "gmaps-map"
+  }, [_vm.error ? [_vm._t("error", function () {
+    return [_c('span', {
+      staticClass: "gmaps-error"
+    }, [_vm._v("Error: " + _vm._s(_vm.error))])];
+  }, {
+    "error": _vm.error
+  })] : _vm.loading ? [_vm._t("loading", function () {
+    return [_c('span', {
+      staticClass: "gmaps-spinner"
+    })];
+  })] : _vm._e(), _vm._v(" "), _c('div', {
+    directives: [{
+      name: "show",
+      rawName: "v-show",
+      value: !_vm.error,
+      expression: "!error"
+    }],
+    ref: "gmap",
+    staticClass: "gmaps-map"
+  }, [!_vm.error && !_vm.loading && !!_vm.map ? _vm._t("default", null, {
+    "map": _vm.map
+  }) : _vm._e()], 2)], 2);
+};
+
+var __vue_staticRenderFns__$3 = [];
+/* style */
+
+var __vue_inject_styles__$3 = function __vue_inject_styles__(inject) {
+  if (!inject) return;
+  inject("data-v-55fa6ed7_0", {
+    source: ".gmaps-map{position:relative;width:100%;height:100%}.gmaps-spinner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.gmaps-spinner::after{content:\"\";display:inline-block;width:200px;height:200px;border:20px solid #ccc;border-radius:50%;border-top-color:#aaa;animation:gmaps-spin 1s ease-in-out infinite}.gmaps-error{position:absolute;top:50%;left:5%;width:90%;transform:translateY(-50%);color:#af0000;font-size:24px}@keyframes gmaps-spin{to{transform:rotate(360deg)}}",
+    map: undefined,
+    media: undefined
+  });
+};
+/* scoped */
+
+
+var __vue_scope_id__$3 = undefined;
+/* module identifier */
+
+var __vue_module_identifier__$3 = undefined;
+/* functional template */
+
+var __vue_is_functional_template__$3 = false;
+/* style inject SSR */
+
+/* style inject shadow dom */
+
+var __vue_component__$3 = /*#__PURE__*/normalizeComponent({
+  render: __vue_render__$3,
+  staticRenderFns: __vue_staticRenderFns__$3
+}, __vue_inject_styles__$3, __vue_script__$3, __vue_scope_id__$3, __vue_is_functional_template__$3, __vue_module_identifier__$3, false, createInjector, undefined, undefined);
+
+var _dec$b, _dec2$b, _dec3$b, _dec4$b, _dec5$9, _dec6$7, _dec7$5, _dec8$5, _dec9$5, _dec10$4, _dec11$4, _dec12$4, _dec13$3, _dec14$3, _dec15$2, _dec16$1, _class$b, _class2$b, _descriptor$b, _descriptor2$b, _descriptor3$b, _descriptor4$7, _descriptor5$6, _descriptor6$5, _descriptor7$5, _descriptor8$5, _descriptor9$4, _descriptor10$4, _descriptor11$4, _descriptor12$3, _descriptor13$3, _descriptor14$2, _descriptor15$1;
+var GmapsCircle = (_dec$b = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$b = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.001
+}), _dec3$b = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec4$b = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec5$9 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec6$7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec7$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec8$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec9$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.3
+}), _dec10$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec11$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 1.0
+}), _dec12$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec13$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 3
+}), _dec14$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec15$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec16$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('_options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$b = (_class2$b = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsCircle, _Vue);
+
+  var _super = _createSuper(GmapsCircle);
+
+  function GmapsCircle() {
+    var _this;
+
+    _classCallCheck(this, GmapsCircle);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsCircle');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$b, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "sensitivity", _descriptor2$b, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "center", _descriptor3$b, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "radius", _descriptor4$7, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "clickable", _descriptor5$6, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "draggable", _descriptor6$5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "editable", _descriptor7$5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "fillColor", _descriptor8$5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "fillOpacity", _descriptor9$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeColor", _descriptor10$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeOpacity", _descriptor11$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokePosition", _descriptor12$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeWeight", _descriptor13$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "visible", _descriptor14$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "zIndex", _descriptor15$1, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "circle", void 0);
+
+    _defineProperty(_assertThisInitialized(_this), "tempCenter", _this.center);
+
+    _defineProperty(_assertThisInitialized(_this), "tempRadius", +_this.radius);
+
+    return _this;
+  }
+
+  _createClass(GmapsCircle, [{
+    key: "_options",
+    get: function get() {
+      return {
+        center: this.center,
+        clickable: this.clickable,
+        draggable: this.draggable,
+        editable: this.editable,
+        fillColor: this.fillColor,
+        fillOpacity: +this.fillOpacity,
+        radius: +this.radius,
+        strokeColor: this.strokeColor,
+        strokeOpacity: +this.strokeOpacity,
+        strokePosition: +this.strokePosition,
+        strokeWeight: +this.strokeWeight,
+        visible: this.visible,
+        zIndex: +this.zIndex
+      };
+    }
+  }, {
+    key: "_optionsChanged",
+    value: function _optionsChanged(newVal) {
+      if (this.circle) this.circle.setOptions(newVal);
+    }
+  }, {
+    key: "changedCenter",
+    value: function changedCenter() {
+      if (!this.circle) return; // This is fired when the component is replaced and may not have a tempCenter
+
+      var newCenter = this.circle.getCenter().toJSON();
+
+      if (!this.tempCenter || Math.abs(newCenter.lat - this.tempCenter.lat) > this.sensitivity || Math.abs(newCenter.lng - this.tempCenter.lng) > this.sensitivity) {
+        this.tempCenter = newCenter;
+        this.$emit('center-changed', newCenter); // TODO: Remove in major release
+
+        this.$emit('centerChanged', newCenter); // eslint-disable-line
+      }
+    }
+  }, {
+    key: "changedRadius",
+    value: function changedRadius() {
+      if (!this.circle) return; // This is fired when the component is replaced and may not have a tempCenter
+
+      var newRadius = this.circle.getRadius();
+
+      if (!this.tempRadius || Math.abs(newRadius - this.tempRadius) > 1) {
+        this.tempRadius = newRadius;
+        this.$emit('radius-changed', newRadius); // TODO: Remove in major release
+
+        this.$emit('radiusChanged', newRadius); // eslint-disable-line
+      }
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      this.circle = new globalThis.google.maps.Circle(_objectSpread2({
+        map: this.getMap()
+      }, this._options));
+      this.circle.addListener('center_changed', function () {
+        return _this2.changedCenter();
+      });
+      this.circle.addListener('radius_changed', function () {
+        return _this2.changedRadius();
+      });
+      this.circle.addListener('click', function (e) {
+        return _this2.$emit('click', e);
+      });
+      this.circle.addListener('dblclick', function (e) {
+        return _this2.$emit('double-click', e);
+      });
+      this.circle.addListener('drag', function (e) {
+        return _this2.$emit('drag', e.latLng ? e.latLng.toJSON() : null);
+      });
+      this.circle.addListener('dragend', function (e) {
+        return _this2.$emit('drag-end', e.latLng ? e.latLng.toJSON() : null);
+      });
+      this.circle.addListener('dragstart', function (e) {
+        return _this2.$emit('drag-start', e.latLng ? e.latLng.toJSON() : null);
+      });
+      this.circle.addListener('mouseover', function (e) {
+        return _this2.$emit('mouseover', e);
+      });
+      this.circle.addListener('rightclick', function (e) {
+        return _this2.$emit('right-click', e);
+      }); // TODO: Remove in major release
+
+      this.circle.addListener('dblclick', function (e) {
+        return _this2.$emit('doubleClick', e);
+      }); // eslint-disable-line
+
+      this.circle.addListener('dragend', function (e) {
+        return _this2.$emit('dragEnd', e.latLng ? e.latLng.toJSON() : null);
+      }); // eslint-disable-line
+
+      this.circle.addListener('dragstart', function (e) {
+        return _this2.$emit('dragStart', e.latLng ? e.latLng.toJSON() : null);
+      }); // eslint-disable-line
+
+      this.circle.addListener('rightclick', function (e) {
+        return _this2.$emit('rightClick', e);
+      }); // eslint-disable-line
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.circle) this.circle.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsCircle;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$b = _applyDecoratedDescriptor(_class2$b.prototype, "getMap", [_dec$b], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$b = _applyDecoratedDescriptor(_class2$b.prototype, "sensitivity", [_dec2$b], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$b = _applyDecoratedDescriptor(_class2$b.prototype, "center", [_dec3$b], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$7 = _applyDecoratedDescriptor(_class2$b.prototype, "radius", [_dec4$b], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5$6 = _applyDecoratedDescriptor(_class2$b.prototype, "clickable", [_dec5$9], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor6$5 = _applyDecoratedDescriptor(_class2$b.prototype, "draggable", [_dec6$7], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor7$5 = _applyDecoratedDescriptor(_class2$b.prototype, "editable", [_dec7$5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor8$5 = _applyDecoratedDescriptor(_class2$b.prototype, "fillColor", [_dec8$5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor9$4 = _applyDecoratedDescriptor(_class2$b.prototype, "fillOpacity", [_dec9$5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor10$4 = _applyDecoratedDescriptor(_class2$b.prototype, "strokeColor", [_dec10$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor11$4 = _applyDecoratedDescriptor(_class2$b.prototype, "strokeOpacity", [_dec11$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor12$3 = _applyDecoratedDescriptor(_class2$b.prototype, "strokePosition", [_dec12$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor13$3 = _applyDecoratedDescriptor(_class2$b.prototype, "strokeWeight", [_dec13$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor14$2 = _applyDecoratedDescriptor(_class2$b.prototype, "visible", [_dec14$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor15$1 = _applyDecoratedDescriptor(_class2$b.prototype, "zIndex", [_dec15$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$b.prototype, "_optionsChanged", [_dec16$1], Object.getOwnPropertyDescriptor(_class2$b.prototype, "_optionsChanged"), _class2$b.prototype)), _class2$b)) || _class$b);
+
+// Get bounds
+var getBounds = function getBounds(items) {
+  var buffer = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+  var north = items[0].lng;
+  var south = items[0].lng;
+  var west = items[0].lat;
+  var east = items[0].lat;
+  items.forEach(function (_ref) {
+    var lat = _ref.lat,
+        lng = _ref.lng;
+    if (lng > north) north = lng;
+    if (lng < south) south = lng;
+    if (lat > east) east = lat;
+    if (lat < west) west = lat;
+  });
+
+  if (buffer) {
+    north -= buffer * (south - north);
+    south += buffer * (south - north);
+    west -= buffer * (east - west);
+    east += buffer * (east - west);
+  }
+
+  var _bounds = new globalThis.google.maps.LatLngBounds(new globalThis.google.maps.LatLng({
+    lat: west,
+    lng: south
+  }, true), new globalThis.google.maps.LatLng({
+    lat: east,
+    lng: north
+  }, true));
+
+  return _bounds;
+};
+
+// https://developers.google.com/maps/documentation/javascript/examples/map-coordinates
+var getMapTile = function getMapTile(pos, zoom, size) {
+  var scale = 1 << zoom;
+  var siny = Math.sin(pos.lat * Math.PI / 180);
+  siny = Math.min(Math.max(siny, -0.9999), 0.9999);
+  var x0 = 0.5 + pos.lng / 360;
+  var y0 = 0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI);
+  var x = Math.floor(x0 * scale / size);
+  var y = Math.floor(y0 * scale / size);
+  return {
+    x: x,
+    y: y
+  };
+}; // Get average position
+
+
+var getAveragePosition = function getAveragePosition(items) {
+  var _count = items.length;
+  var _init = {
+    lat: 0,
+    lng: 0
+  };
+
+  var _posTot = items.reduce(function (acc, cur) {
+    return {
+      lat: acc.lat + cur.lat,
+      lng: acc.lng + cur.lng
+    };
+  }, _init);
+
+  var pos = {
+    lat: _posTot.lat / _count,
+    lng: _posTot.lng / _count
+  };
+  return pos;
+}; // Get weight
+
+var getWeight = function getWeight(cluster, total) {
+  return Math.round(cluster / total * 100);
+}; // Organise a given set of items into tiles of given size and appropriate for a given zoom
+
+
+var organiseClusters = function organiseClusters(items, zoom, maxZoom, tileSize) {
+  var result = {}; // If zoom exceeds maxZoom, do not cluster
+
+  if (zoom >= maxZoom) {
+    items.forEach(function (item, index) {
+      result[index] = {
+        pos: item,
+        items: [item]
+      };
+    }); // Otherwise, cluster
+  } else {
+    // Cluster by tile
+    items.forEach(function (item) {
+      var tile = getMapTile(item, zoom, tileSize);
+      var index = "".concat(zoom, "-").concat(tile.x, "-").concat(tile.y);
+      if (!result[index]) result[index] = {
+        pos: {
+          lat: 0,
+          lng: 0
+        },
+        items: []
+      };
+      result[index].items.push(item);
+    }); // Set average positions and weights
+
+    for (var _i = 0, _Object$entries = Object.entries(result); _i < _Object$entries.length; _i++) {
+      var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
+          key = _Object$entries$_i[0],
+          value = _Object$entries$_i[1];
+
+      result[key].pos = getAveragePosition(value.items);
+      result[key].weight = getWeight(value.items.length, items.length);
+    }
+  }
+
+  return result;
+};
+
+var _dec$a, _dec2$a, _dec3$a, _dec4$a, _dec5$8, _dec6$6, _dec7$4, _dec8$4, _dec9$4, _dec10$3, _dec11$3, _dec12$3, _class$a, _class2$a, _descriptor$a, _descriptor2$a, _descriptor3$a, _descriptor4$6, _descriptor5$5, _descriptor6$4, _descriptor7$4, _descriptor8$4, _descriptor9$3, _descriptor10$3, _descriptor11$3;
+var GmapsMarker = (_dec$a = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$a = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('handleError'), _dec3$a = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: function _default() {
+    return {};
+  }
+}), _dec4$a = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.001
+}), _dec5$8 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec6$6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec7$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec8$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec9$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec10$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec11$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec12$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('_options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$a = (_class2$a = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsMarker, _Vue);
+
+  var _super = _createSuper(GmapsMarker);
+
+  function GmapsMarker() {
+    var _this;
+
+    _classCallCheck(this, GmapsMarker);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsMarker');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$a, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "handleError", _descriptor2$a, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor3$a, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "sensitivity", _descriptor4$6, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "visible", _descriptor5$5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "icon", _descriptor6$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "label", _descriptor7$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "opacity", _descriptor8$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "position", _descriptor9$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "title", _descriptor10$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "zIndex", _descriptor11$3, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "marker", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsMarker, [{
+    key: "_options",
+    get: function get() {
+      var options = _objectSpread2({}, this.options);
+
+      if (this.visible) options.visible = this.visible;
+      if (this.icon) options.icon = this.icon;
+      if (this.label) options.label = this.label.toString();
+      if (this.opacity) options.opacity = +this.opacity;
+      if (this.position) options.position = this.position;
+      if (this.title) options.title = this.title;
+      if (this.zIndex) options.zIndex = +this.zIndex;
+      return options;
+    }
+  }, {
+    key: "_optionsChanged",
+    value: function _optionsChanged(newVal) {
+      if (this.marker) this.marker.setOptions(newVal);
+    }
+  }, {
+    key: "changedPosition",
+    value: function changedPosition() {
+      var oldPosition = this._options.position; // This function is fired when a marker is replaced by Vue (and options is undefined)
+
+      if (!oldPosition) return false;
+      var newPosition = this.marker.getPosition().toJSON();
+      return Math.abs(newPosition.lat - oldPosition.lat) > this.sensitivity || Math.abs(newPosition.lng - oldPosition.lng) > this.sensitivity ? newPosition : false;
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      // Early return for no position
+      if (!this._options.position) return this.handleError(new Error('x5-gmaps: A position is required by every marker. Set this as either a position prop, or a position property of the options prop.'));
+      this.marker = new globalThis.google.maps.Marker(_objectSpread2({
+        map: this.getMap()
+      }, this._options));
+      this.marker.addListener('position_changed', function () {
+        var position = _this2.changedPosition();
+
+        if (position) {
+          _this2.$emit('move', position); // Depreciated 19/04
+
+
+          _this2.$emit('position-changed', position);
+        }
+      });
+      this.marker.addListener('click', function (e) {
+        return _this2.$emit('click', e);
+      });
+      this.marker.addListener('dblclick', function (e) {
+        return _this2.$emit('double-click', e);
+      });
+      this.marker.addListener('rightclick', function (e) {
+        return _this2.$emit('right-click', e);
+      });
+      this.marker.addListener('mouseover', function (e) {
+        return _this2.$emit('mouseover', e);
+      });
+      this.marker.addListener('mouseout', function (e) {
+        return _this2.$emit('mouseout', e);
+      }); // TODO: Remove in major release
+
+      this.marker.addListener('dblclick', function (e) {
+        return _this2.$emit('doubleClick', e);
+      }); // eslint-disable-line
+
+      this.marker.addListener('rightclick', function (e) {
+        return _this2.$emit('rightClick', e);
+      }); // eslint-disable-line
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.marker) google.maps.event.clearInstanceListeners(this.marker);
+      if (this.marker) this.marker.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsMarker;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$a = _applyDecoratedDescriptor(_class2$a.prototype, "getMap", [_dec$a], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$a = _applyDecoratedDescriptor(_class2$a.prototype, "handleError", [_dec2$a], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$a = _applyDecoratedDescriptor(_class2$a.prototype, "options", [_dec3$a], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$6 = _applyDecoratedDescriptor(_class2$a.prototype, "sensitivity", [_dec4$a], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5$5 = _applyDecoratedDescriptor(_class2$a.prototype, "visible", [_dec5$8], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor6$4 = _applyDecoratedDescriptor(_class2$a.prototype, "icon", [_dec6$6], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor7$4 = _applyDecoratedDescriptor(_class2$a.prototype, "label", [_dec7$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor8$4 = _applyDecoratedDescriptor(_class2$a.prototype, "opacity", [_dec8$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor9$3 = _applyDecoratedDescriptor(_class2$a.prototype, "position", [_dec9$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor10$3 = _applyDecoratedDescriptor(_class2$a.prototype, "title", [_dec10$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor11$3 = _applyDecoratedDescriptor(_class2$a.prototype, "zIndex", [_dec11$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$a.prototype, "_optionsChanged", [_dec12$3], Object.getOwnPropertyDescriptor(_class2$a.prototype, "_optionsChanged"), _class2$a.prototype)), _class2$a)) || _class$a);
+
+// TODO: Can't figure out the type vs class definition here
+var createPopupClass = function createPopupClass() {
+  /**
+   * A customized popup on the map.
+   */
+  return /*#__PURE__*/function (_google$maps$OverlayV) {
+    _inherits(Popup, _google$maps$OverlayV);
+
+    var _super = _createSuper(Popup);
+
+    function Popup(position, content) {
+      var _this;
+
+      _classCallCheck(this, Popup);
+
+      _this = _super.call(this);
+
+      _defineProperty(_assertThisInitialized(_this), "position", void 0);
+
+      _defineProperty(_assertThisInitialized(_this), "content", void 0);
+
+      _this.position = new globalThis.google.maps.LatLng(position);
+      _this.content = content; // Optionally stop clicks, etc., from bubbling up to the map.
+
+      Popup.preventMapHitsAndGesturesFrom(_this.content);
+      return _this;
+    }
+    /** Called when the popup is added to the map. */
+
+
+    _createClass(Popup, [{
+      key: "onAdd",
+      value: function onAdd() {
+        var panes = this.getPanes();
+        this.content.addEventListener('touchstart', function () {
+          return null;
+        }, {
+          passive: true
+        });
+        this.content.addEventListener('touchmove', function () {
+          return null;
+        }, {
+          passive: true
+        });
+        if (panes) panes.floatPane.appendChild(this.content);
+      }
+      /** Called when the popup is removed from the map. */
+
+    }, {
+      key: "onRemove",
+      value: function onRemove() {
+        if (this.content.parentElement) this.content.parentElement.removeChild(this.content);
+      }
+      /** Called each frame when the popup needs to draw itself. */
+      // TODO: This is called soooo much
+
+    }, {
+      key: "draw",
+      value: function draw() {
+        var projection = this.getProjection();
+        if (!projection) return this.onRemove();
+        var divPosition = projection.fromLatLngToDivPixel(this.position); // Hide the popup when it is far out of view.
+        // TODO: Make this a prop
+
+        var display = divPosition && Math.abs(divPosition.x) < 4000 && Math.abs(divPosition.y) < 4000 ? 'block' : 'none';
+
+        if (display === 'block') {
+          this.content.style.left = divPosition.x + 'px';
+          this.content.style.top = divPosition.y + 'px';
+        }
+
+        if (this.content.style.display !== display) {
+          this.content.style.display = display;
+        }
+      } // Custom
+
+    }, {
+      key: "setPosition",
+      value: function setPosition(position) {
+        this.position = new globalThis.google.maps.LatLng(position);
+        this.draw();
+      }
+    }]);
+
+    return Popup;
+  }(google.maps.OverlayView);
+};
+
+var _dec$9, _dec2$9, _dec3$9, _dec4$9, _dec5$7, _class$9, _class2$9, _descriptor$9, _descriptor2$9, _descriptor3$9, _descriptor4$5;
+var GmapsClusterPin = (_dec$9 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$9 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec3$9 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec4$9 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: '#EEEEEE'
+}), _dec5$7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('position', {
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$9 = (_class2$9 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsClusterPin, _Vue);
+
+  var _super = _createSuper(GmapsClusterPin);
+
+  function GmapsClusterPin() {
+    var _this;
+
+    _classCallCheck(this, GmapsClusterPin);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsClusterPin');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$9, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "position", _descriptor2$9, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "count", _descriptor3$9, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "background", _descriptor4$5, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "popup", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsClusterPin, [{
+    key: "positionChanged",
+    value: function positionChanged(newVal) {
+      if (this.popup) this.popup.setPosition(newVal);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var Popup = createPopupClass();
+      this.popup = new Popup(this.position, this.$el);
+      if (this.popup) this.popup.setMap(this.getMap());
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.popup) this.popup.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsClusterPin;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$9 = _applyDecoratedDescriptor(_class2$9.prototype, "getMap", [_dec$9], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$9 = _applyDecoratedDescriptor(_class2$9.prototype, "position", [_dec2$9], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$9 = _applyDecoratedDescriptor(_class2$9.prototype, "count", [_dec3$9], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$5 = _applyDecoratedDescriptor(_class2$9.prototype, "background", [_dec4$9], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$9.prototype, "positionChanged", [_dec5$7], Object.getOwnPropertyDescriptor(_class2$9.prototype, "positionChanged"), _class2$9.prototype)), _class2$9)) || _class$9);
+
+/* script */
+var __vue_script__$2 = GmapsClusterPin;
+/* template */
+
+var __vue_render__$2 = function __vue_render__() {
+  var _obj;
+
+  var _vm = this;
+
+  var _h = _vm.$createElement;
+
+  var _c = _vm._self._c || _h;
+
+  return _c('div', {
+    staticClass: "gmaps-cluster-pin",
+    on: {
+      "click": function click($event) {
+        $event.preventDefault();
+        return _vm.$emit('click');
+      }
+    }
+  }, [_c('div', {
+    staticClass: "gmaps-cluster-center",
+    style: (_obj = {}, _obj['--background'] = _vm.background, _obj)
+  }, [_c('span', [_vm._v("\n      " + _vm._s(_vm.count) + "\n    ")])])]);
+};
+
+var __vue_staticRenderFns__$2 = [];
+/* style */
+
+var __vue_inject_styles__$2 = function __vue_inject_styles__(inject) {
+  if (!inject) return;
+  inject("data-v-4973b532_0", {
+    source: ".gmaps-cluster-center{color:#444;cursor:pointer;font-family:sans-serif;font-size:18px;left:0;overflow-y:auto;padding:5px;position:absolute;text-align:center;vertical-align:middle;top:0;transform:translate(-50%,-100%);min-width:40px;border-radius:50%;background-color:var(--background);box-shadow:0 0 10px 10px var(--background);pointer-events:all}.gmaps-cluster-pin{pointer-events:none;cursor:auto;height:0;position:absolute;width:100%}",
+    map: undefined,
+    media: undefined
+  });
+};
+/* scoped */
+
+
+var __vue_scope_id__$2 = undefined;
+/* module identifier */
+
+var __vue_module_identifier__$2 = undefined;
+/* functional template */
+
+var __vue_is_functional_template__$2 = false;
+/* style inject SSR */
+
+/* style inject shadow dom */
+
+var __vue_component__$2 = /*#__PURE__*/normalizeComponent({
+  render: __vue_render__$2,
+  staticRenderFns: __vue_staticRenderFns__$2
+}, __vue_inject_styles__$2, __vue_script__$2, __vue_scope_id__$2, __vue_is_functional_template__$2, __vue_module_identifier__$2, false, createInjector, undefined, undefined);
+
+var _dec$8, _dec2$8, _dec3$8, _dec4$8, _dec5$6, _dec6$5, _class$8, _class2$8, _descriptor$8, _descriptor2$8, _descriptor3$8;
+var defaultOptions = {
+  minZoom: -1,
+  maxZoom: 8,
+  tileSize: 0.5,
+  // TODO: Seems to break the click to zoom above this number??
+  highPercentage: 10,
+  lowPercentage: 3
+};
+var GmapsCluster = (_dec$8 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)({
+  components: {
+    gmapsMarker: GmapsMarker,
+    gmapsClusterPin: __vue_component__$2
+  }
+}), _dec2$8 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec3$8 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec4$8 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: function _default() {
+    return {};
+  }
+}), _dec5$6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('options', {
+  immediate: true
+}), _dec6$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('items', {
+  immediate: true
+}), _dec$8(_class$8 = (_class2$8 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsCluster, _Vue);
+
+  var _super = _createSuper(GmapsCluster);
+
+  function GmapsCluster() {
+    var _this;
+
+    _classCallCheck(this, GmapsCluster);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsCluster');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$8, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "items", _descriptor2$8, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor3$8, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "clusterOptions", _objectSpread2({}, defaultOptions));
+
+    _defineProperty(_assertThisInitialized(_this), "eventListener", []);
+
+    _defineProperty(_assertThisInitialized(_this), "all", {});
+
+    _defineProperty(_assertThisInitialized(_this), "lastBounds", new globalThis.google.maps.LatLngBounds());
+
+    _defineProperty(_assertThisInitialized(_this), "lastZoom", 0);
+
+    _defineProperty(_assertThisInitialized(_this), "clusters", {});
+
+    _defineProperty(_assertThisInitialized(_this), "clustered", false);
+
+    return _this;
+  }
+
+  _createClass(GmapsCluster, [{
+    key: "optionsChanged",
+    value: function optionsChanged(newOptions) {
+      this.clusterOptions = _objectSpread2(_objectSpread2({}, defaultOptions), newOptions);
+      this.refresh(true);
+    }
+  }, {
+    key: "itemsChanged",
+    value: function itemsChanged() {
+      this.refresh(true);
+    }
+  }, {
+    key: "shouldOrganise",
+    value: function shouldOrganise(force, zoom) {
+      if (force) return true;
+      if (zoom !== this.lastZoom) return true;
+      return false;
+    }
+  }, {
+    key: "shouldFilter",
+    value: function shouldFilter(force, zoom, bounds) {
+      if (!bounds) return false;
+      if (force) return true;
+      if (zoom !== this.lastZoom) return true;
+      if (!this.lastBounds.contains(bounds.getNorthEast())) return true;
+      if (!this.lastBounds.contains(bounds.getSouthWest())) return true;
+      return false;
+    }
+  }, {
+    key: "refresh",
+    value: function refresh() {
+      var force = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+
+      var _zoom = this.getMap().getZoom() || this.lastZoom;
+
+      var _bounds = this.getMap().getBounds(); // Organise
+
+
+      if (this.shouldOrganise(force, _zoom)) {
+        this.all = organiseClusters(this.items, Math.max(_zoom, this.clusterOptions.minZoom), this.clusterOptions.maxZoom, this.clusterOptions.tileSize);
+      } // Filter
+
+
+      if (this.shouldFilter(force, _zoom, _bounds)) {
+        // Update what is visible in new bounds
+        var _filtered = {};
+
+        var _rand = Math.floor(Math.random() * 10000);
+
+        for (var _i = 0, _Object$entries = Object.entries(this.all); _i < _Object$entries.length; _i++) {
+          var _Object$entries$_i = _slicedToArray(_Object$entries[_i], 2),
+              key = _Object$entries$_i[0],
+              value = _Object$entries$_i[1];
+
+          if (_bounds !== null && _bounds !== void 0 && _bounds.contains(value.pos)) _filtered["".concat(key, "-").concat(_rand)] = value;
+        } // Update variables
+
+
+        this.lastZoom = _zoom;
+        this.lastBounds = _bounds;
+        this.clusters = _filtered;
+      }
+    }
+  }, {
+    key: "getColor",
+    value: function getColor(weight) {
+      if (!this.clusterOptions.highPercentage && !this.clusterOptions.lowPercentage) return;
+      if (this.clusterOptions.highPercentage && weight >= this.clusterOptions.highPercentage) return '#FBB3BD';
+      if (this.clusterOptions.lowPercentage && weight <= this.clusterOptions.lowPercentage) return '#CCF1FF';
+      return '#F1E0B0';
+    }
+  }, {
+    key: "clusterClickHandler",
+    value: function clusterClickHandler(key) {
+      var _clusterBounds = getBounds(this.clusters[key].items, 0.1);
+
+      var _clusterCenter = getAveragePosition(this.clusters[key].items);
+
+      this.getMap().fitBounds(_clusterBounds, 1);
+      this.getMap().setCenter(_clusterCenter);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      this.refresh(true);
+      this.eventListener.push(this.getMap().addListener('bounds_changed', function () {
+        return _this2.refresh();
+      }));
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.eventListener.length) this.eventListener.forEach(function (e) {
+        return e.remove();
+      });
+    }
+  }]);
+
+  return GmapsCluster;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$8 = _applyDecoratedDescriptor(_class2$8.prototype, "getMap", [_dec2$8], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$8 = _applyDecoratedDescriptor(_class2$8.prototype, "items", [_dec3$8], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$8 = _applyDecoratedDescriptor(_class2$8.prototype, "options", [_dec4$8], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$8.prototype, "optionsChanged", [_dec5$6], Object.getOwnPropertyDescriptor(_class2$8.prototype, "optionsChanged"), _class2$8.prototype), _applyDecoratedDescriptor(_class2$8.prototype, "itemsChanged", [_dec6$5], Object.getOwnPropertyDescriptor(_class2$8.prototype, "itemsChanged"), _class2$8.prototype)), _class2$8)) || _class$8);
+
+/* script */
+var __vue_script__$1 = GmapsCluster;
+/* template */
+
+var __vue_render__$1 = function __vue_render__() {
+  var _vm = this;
+
+  var _h = _vm.$createElement;
+
+  var _c = _vm._self._c || _h;
+
+  return _c('div', [_vm._l(_vm.clusters, function (ref, key) {
+    var pos = ref.pos;
+    var items = ref.items;
+    var weight = ref.weight;
+    return [items.length > 1 ? _c('gmaps-cluster-pin', {
+      key: "c-" + key,
+      attrs: {
+        "count": items.length,
+        "position": pos,
+        "background": _vm.getColor(weight)
+      },
+      on: {
+        "click": function click($event) {
+          return _vm.clusterClickHandler(key);
+        }
+      }
+    }) : _c('gmaps-marker', {
+      key: "m-" + key,
+      attrs: {
+        "position": pos,
+        "title": items[0].title || items[0].id,
+        "visible": items[0].visible || true,
+        "icon": items[0].icon || undefined,
+        "label": items[0].label || undefined,
+        "opacity": items[0].opacity || undefined,
+        "z-index": items[0].zIndex || undefined
+      },
+      on: {
+        "click": function click($event) {
+          return _vm.$emit('click', items[0].id || $event);
+        }
+      }
+    })];
+  })], 2);
+};
+
+var __vue_staticRenderFns__$1 = [];
+/* style */
+
+var __vue_inject_styles__$1 = undefined;
+/* scoped */
+
+var __vue_scope_id__$1 = undefined;
+/* module identifier */
+
+var __vue_module_identifier__$1 = undefined;
+/* functional template */
+
+var __vue_is_functional_template__$1 = false;
+/* style inject */
+
+/* style inject SSR */
+
+/* style inject shadow dom */
+
+var __vue_component__$1 = /*#__PURE__*/normalizeComponent({
+  render: __vue_render__$1,
+  staticRenderFns: __vue_staticRenderFns__$1
+}, __vue_inject_styles__$1, __vue_script__$1, __vue_scope_id__$1, __vue_is_functional_template__$1, __vue_module_identifier__$1, false, undefined, undefined, undefined);
+
+var _dec$7, _dec2$7, _dec3$7, _dec4$7, _class$7, _class2$7, _descriptor$7, _descriptor2$7, _descriptor3$7;
+var GmapsData = (_dec$7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('handleError'), _dec3$7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec4$7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$7 = (_class2$7 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsData, _Vue);
+
+  var _super = _createSuper(GmapsData);
+
+  function GmapsData() {
+    var _this;
+
+    _classCallCheck(this, GmapsData);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsData');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$7, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "handleError", _descriptor2$7, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor3$7, _assertThisInitialized(_this));
+
+    return _this;
+  }
+
+  _createClass(GmapsData, [{
+    key: "optionsChanged",
+    value: function optionsChanged(newVal) {
+      this.getMap().data.setStyle(newVal);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      // NOTE: This is to enforce only one GmapsData element per map
+      if (this.getMap().data.getFeatureById('_gmapsDataCollection')) return this.handleError(new Error('There can only be one GmapsData element per GmapsMap. Use GmapsDataGeoJson elements to add more GeoJSON data.'));
+      this.getMap().data.add(new globalThis.google.maps.Data.Feature({
+        id: '_gmapsDataCollection'
+      })); // NOTE: Events occur on the whole data object, not individual features
+
+      this.getMap().data.addListener('click', function (e) {
+        return _this2.$emit('click', e);
+      });
+      this.getMap().data.addListener('contextmenu', function (e) {
+        return _this2.$emit('contextmenu', e);
+      });
+      this.getMap().data.addListener('dblclick', function (e) {
+        return _this2.$emit('dblclick', e);
+      });
+      this.getMap().data.addListener('mousedown', function (e) {
+        return _this2.$emit('mousedown', e);
+      });
+      this.getMap().data.addListener('mouseout', function (e) {
+        return _this2.$emit('mouseout', e);
+      });
+      this.getMap().data.addListener('mouseover', function (e) {
+        return _this2.$emit('mouseover', e);
+      });
+      this.getMap().data.addListener('mouseup', function (e) {
+        return _this2.$emit('mouseup', e);
+      });
+      this.getMap().data.addListener('rightclick', function (e) {
+        return _this2.$emit('rightclick', e);
+      });
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      var mainFeature = this.getMap().data.getFeatureById('_gmapsDataCollection');
+      if (mainFeature) this.getMap().data.remove(mainFeature);
+    }
+  }, {
+    key: "render",
+    value: function render(h) {
+      return h('div', this.$slots.default);
+    }
+  }]);
+
+  return GmapsData;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$7 = _applyDecoratedDescriptor(_class2$7.prototype, "getMap", [_dec$7], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$7 = _applyDecoratedDescriptor(_class2$7.prototype, "handleError", [_dec2$7], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$7 = _applyDecoratedDescriptor(_class2$7.prototype, "options", [_dec3$7], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$7.prototype, "optionsChanged", [_dec4$7], Object.getOwnPropertyDescriptor(_class2$7.prototype, "optionsChanged"), _class2$7.prototype)), _class2$7)) || _class$7);
+
+var _dec$6, _dec2$6, _dec3$6, _dec4$6, _dec5$5, _class$6, _class2$6, _descriptor$6, _descriptor2$6, _descriptor3$6;
+var GmapsDataGeoJson = (_dec$6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec3$6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec4$6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('geoJson', {
+  immediate: true,
+  deep: true
+}), _dec5$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('styleOptions', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$6 = (_class2$6 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsDataGeoJson, _Vue);
+
+  var _super = _createSuper(GmapsDataGeoJson);
+
+  function GmapsDataGeoJson() {
+    var _this;
+
+    _classCallCheck(this, GmapsDataGeoJson);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsDataGeoJson');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$6, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor2$6, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "geoJson", _descriptor3$6, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "features", []);
+
+    return _this;
+  }
+
+  _createClass(GmapsDataGeoJson, [{
+    key: "updateGeoJson",
+    value: function updateGeoJson() {
+      // Clear feature list
+      this.clear();
+      if (!this.geoJson) return; // Add whatever was given and store returned features
+
+      this.features = this.getMap().data.addGeoJson(this.geoJson);
+      this.updateStyles();
+    }
+  }, {
+    key: "updateStyles",
+    value: function updateStyles() {
+      var _this2 = this;
+
+      this.features.forEach(function (e) {
+        return _this2.getMap().data.overrideStyle(e, _this2.options);
+      });
+    }
+  }, {
+    key: "clear",
+    value: function clear() {
+      var _this3 = this;
+
+      // TODO: Test whether this function can handle removing non-existent features
+      this.features.forEach(function (e) {
+        return _this3.getMap().data.remove(e);
+      });
+    }
+  }, {
+    key: "_geoJsonChanged",
+    value: function _geoJsonChanged() {
+      this.updateGeoJson();
+    }
+  }, {
+    key: "_styleOptionsChanged",
+    value: function _styleOptionsChanged() {
+      this.updateStyles();
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      this.updateGeoJson();
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      this.clear();
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsDataGeoJson;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$6 = _applyDecoratedDescriptor(_class2$6.prototype, "getMap", [_dec$6], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$6 = _applyDecoratedDescriptor(_class2$6.prototype, "options", [_dec2$6], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$6 = _applyDecoratedDescriptor(_class2$6.prototype, "geoJson", [_dec3$6], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$6.prototype, "_geoJsonChanged", [_dec4$6], Object.getOwnPropertyDescriptor(_class2$6.prototype, "_geoJsonChanged"), _class2$6.prototype), _applyDecoratedDescriptor(_class2$6.prototype, "_styleOptionsChanged", [_dec5$5], Object.getOwnPropertyDescriptor(_class2$6.prototype, "_styleOptionsChanged"), _class2$6.prototype)), _class2$6)) || _class$6);
+
+var _dec$5, _dec2$5, _dec3$5, _dec4$5, _class$5, _class2$5, _descriptor$5, _descriptor2$5, _descriptor3$5;
+var GmapsInfoWindow = (_dec$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('handleError'), _dec3$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: function _default() {
+    return {};
+  }
+}), _dec4$5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$5 = (_class2$5 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsInfoWindow, _Vue);
+
+  var _super = _createSuper(GmapsInfoWindow);
+
+  function GmapsInfoWindow() {
+    var _this;
+
+    _classCallCheck(this, GmapsInfoWindow);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsInfoWindow');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "handleError", _descriptor2$5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor3$5, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "infoW", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsInfoWindow, [{
+    key: "open",
+    value: function open() {
+      if (this.infoW) this.infoW.open(this.getMap());
+    }
+  }, {
+    key: "optionsChanged",
+    value: function optionsChanged(newVal) {
+      if (this.infoW) this.infoW.setOptions(newVal);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      if (!this.options.position) return this.handleError(new Error('InfoWindow options require a position property.'));
+      this.infoW = new globalThis.google.maps.InfoWindow(_objectSpread2({
+        content: this.$el
+      }, this.options));
+      this.infoW.addListener('closeclick', function () {
+        return _this2.$emit('closed');
+      });
+      this.open();
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.infoW) this.infoW.close();
+      if (this.infoW) globalThis.google.maps.event.clearInstanceListeners(this.infoW);
+    }
+  }, {
+    key: "render",
+    value: function render(h) {
+      return h('div', this.$slots.default);
+    }
+  }]);
+
+  return GmapsInfoWindow;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$5 = _applyDecoratedDescriptor(_class2$5.prototype, "getMap", [_dec$5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$5 = _applyDecoratedDescriptor(_class2$5.prototype, "handleError", [_dec2$5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$5 = _applyDecoratedDescriptor(_class2$5.prototype, "options", [_dec3$5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$5.prototype, "optionsChanged", [_dec4$5], Object.getOwnPropertyDescriptor(_class2$5.prototype, "optionsChanged"), _class2$5.prototype)), _class2$5)) || _class$5);
+
+var _dec$4, _dec2$4, _dec3$4, _dec4$4, _dec5$4, _dec6$4, _dec7$3, _dec8$3, _dec9$3, _dec10$2, _dec11$2, _dec12$2, _dec13$2, _dec14$2, _dec15$1, _dec16, _class$4, _class2$4, _descriptor$4, _descriptor2$4, _descriptor3$4, _descriptor4$4, _descriptor5$4, _descriptor6$3, _descriptor7$3, _descriptor8$3, _descriptor9$2, _descriptor10$2, _descriptor11$2, _descriptor12$2, _descriptor13$2, _descriptor14$1, _descriptor15;
+var GmapsPolygon = (_dec$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: function _default() {
+    return {};
+  }
+}), _dec3$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec4$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec5$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec6$4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec7$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.3
+}), _dec8$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec9$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec10$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec11$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 1.0
+}), _dec12$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec13$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 3
+}), _dec14$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec15$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec16 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('_options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$4 = (_class2$4 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsPolygon, _Vue);
+
+  var _super = _createSuper(GmapsPolygon);
+
+  function GmapsPolygon() {
+    var _this;
+
+    _classCallCheck(this, GmapsPolygon);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsPolygon');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor2$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "clickable", _descriptor3$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "draggable", _descriptor4$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "editable", _descriptor5$4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "fillColor", _descriptor6$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "fillOpacity", _descriptor7$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "geodesic", _descriptor8$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "path", _descriptor9$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeColor", _descriptor10$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeOpacity", _descriptor11$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokePosition", _descriptor12$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeWeight", _descriptor13$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "visible", _descriptor14$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "zIndex", _descriptor15, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "polygon", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsPolygon, [{
+    key: "_options",
+    get: function get() {
+      var options = _objectSpread2(_objectSpread2({}, this.options), {}, {
+        geodesic: this.geodesic,
+        paths: [this.path],
+        clickable: this.clickable,
+        draggable: this.draggable,
+        editable: this.editable,
+        fillColor: this.fillColor,
+        fillOpacity: +this.fillOpacity,
+        strokeColor: this.strokeColor,
+        strokeOpacity: +this.strokeOpacity,
+        strokePosition: +this.strokePosition,
+        strokeWeight: +this.strokeWeight,
+        visible: this.visible,
+        zIndex: +this.zIndex
+      });
+
+      return options;
+    }
+  }, {
+    key: "_optionsChanged",
+    value: function _optionsChanged(newVal) {
+      if (this.polygon) this.polygon.setOptions(newVal);
+    }
+  }, {
+    key: "changedPath",
+    value: function changedPath() {
+      if (this.polygon && (this.polygon.getEditable() || this.polygon.getDraggable())) {
+        var result = this.polygon.getPath().getArray().map(function (e) {
+          return e.toJSON();
+        });
+        this.polygon.setPath(result);
+        this.$emit('path-changed', result); // TODO: Remove in major release
+
+        this.$emit('pathChanged', result); // eslint-disable-line
+      }
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      this.polygon = new globalThis.google.maps.Polygon(_objectSpread2({
+        map: this.getMap()
+      }, this._options));
+      this.polygon.addListener('click', function (e) {
+        return _this2.$emit('click', e);
+      });
+      this.polygon.addListener('dblclick', function (e) {
+        return _this2.$emit('double-click', e);
+      });
+      this.polygon.addListener('dragend', function (e) {
+        return _this2.$emit('drag-end', e);
+      });
+      this.polygon.addListener('dragstart', function (e) {
+        return _this2.$emit('drag-start', e);
+      });
+      this.polygon.addListener('rightclick', function (e) {
+        return _this2.$emit('right-click', e);
+      }); // NOTE: path events insert_at and set_at only fired once so mouse up was more reliable (but mouse up doesn't trigger for remove event)
+
+      this.polygon.addListener('mouseup', function () {
+        return _this2.changedPath();
+      });
+      this.polygon.getPath().addListener('remove_at', function () {
+        return _this2.changedPath();
+      }); // TODO: Remove in major release
+
+      this.polygon.addListener('dblclick', function (e) {
+        return _this2.$emit('doubleClick', e);
+      }); // eslint-disable-line
+
+      this.polygon.addListener('dragend', function (e) {
+        return _this2.$emit('dragEnd', e);
+      }); // eslint-disable-line
+
+      this.polygon.addListener('dragstart', function (e) {
+        return _this2.$emit('dragStart', e);
+      }); // eslint-disable-line
+
+      this.polygon.addListener('rightclick', function (e) {
+        return _this2.$emit('rightClick', e);
+      }); // eslint-disable-line
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.polygon) this.polygon.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsPolygon;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$4 = _applyDecoratedDescriptor(_class2$4.prototype, "getMap", [_dec$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$4 = _applyDecoratedDescriptor(_class2$4.prototype, "options", [_dec2$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$4 = _applyDecoratedDescriptor(_class2$4.prototype, "clickable", [_dec3$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$4 = _applyDecoratedDescriptor(_class2$4.prototype, "draggable", [_dec4$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5$4 = _applyDecoratedDescriptor(_class2$4.prototype, "editable", [_dec5$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor6$3 = _applyDecoratedDescriptor(_class2$4.prototype, "fillColor", [_dec6$4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor7$3 = _applyDecoratedDescriptor(_class2$4.prototype, "fillOpacity", [_dec7$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor8$3 = _applyDecoratedDescriptor(_class2$4.prototype, "geodesic", [_dec8$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor9$2 = _applyDecoratedDescriptor(_class2$4.prototype, "path", [_dec9$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor10$2 = _applyDecoratedDescriptor(_class2$4.prototype, "strokeColor", [_dec10$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor11$2 = _applyDecoratedDescriptor(_class2$4.prototype, "strokeOpacity", [_dec11$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor12$2 = _applyDecoratedDescriptor(_class2$4.prototype, "strokePosition", [_dec12$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor13$2 = _applyDecoratedDescriptor(_class2$4.prototype, "strokeWeight", [_dec13$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor14$1 = _applyDecoratedDescriptor(_class2$4.prototype, "visible", [_dec14$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor15 = _applyDecoratedDescriptor(_class2$4.prototype, "zIndex", [_dec15$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$4.prototype, "_optionsChanged", [_dec16], Object.getOwnPropertyDescriptor(_class2$4.prototype, "_optionsChanged"), _class2$4.prototype)), _class2$4)) || _class$4);
+
+var _dec$3, _dec2$3, _dec3$3, _dec4$3, _dec5$3, _dec6$3, _dec7$2, _dec8$2, _dec9$2, _dec10$1, _dec11$1, _dec12$1, _dec13$1, _dec14$1, _class$3, _class2$3, _descriptor$3, _descriptor2$3, _descriptor3$3, _descriptor4$3, _descriptor5$3, _descriptor6$2, _descriptor7$2, _descriptor8$2, _descriptor9$1, _descriptor10$1, _descriptor11$1, _descriptor12$1, _descriptor13$1;
+var GmapsPolyline = (_dec$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: function _default() {
+    return {};
+  }
+}), _dec3$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec4$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec5$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec6$3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec7$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec8$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec9$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec10$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 1.0
+}), _dec11$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 3
+}), _dec12$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec13$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec14$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('_options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$3 = (_class2$3 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsPolyline, _Vue);
+
+  var _super = _createSuper(GmapsPolyline);
+
+  function GmapsPolyline() {
+    var _this;
+
+    _classCallCheck(this, GmapsPolyline);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsPolyline');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "options", _descriptor2$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "clickable", _descriptor3$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "draggable", _descriptor4$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "editable", _descriptor5$3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "icons", _descriptor6$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "geodesic", _descriptor7$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "path", _descriptor8$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeColor", _descriptor9$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeOpacity", _descriptor10$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeWeight", _descriptor11$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "visible", _descriptor12$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "zIndex", _descriptor13$1, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "polyline", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsPolyline, [{
+    key: "_options",
+    get: function get() {
+      var options = _objectSpread2(_objectSpread2({}, this.options), {}, {
+        geodesic: this.geodesic,
+        path: this.path,
+        clickable: this.clickable,
+        draggable: this.draggable,
+        editable: this.editable,
+        strokeColor: this.strokeColor,
+        strokeOpacity: +this.strokeOpacity,
+        strokeWeight: +this.strokeWeight,
+        visible: this.visible,
+        zIndex: +this.zIndex
+      });
+
+      if (this.icons) options.icons = this.icons;
+      return options;
+    }
+  }, {
+    key: "_optionsChanged",
+    value: function _optionsChanged(newVal) {
+      if (this.polyline) this.polyline.setOptions(newVal);
+    }
+  }, {
+    key: "changedPath",
+    value: function changedPath() {
+      if (this.polyline && (this.polyline.getEditable() || this.polyline.getDraggable())) {
+        var result = this.polyline.getPath().getArray().map(function (e) {
+          return e.toJSON();
+        });
+        this.polyline.setPath(result);
+        this.$emit('path-changed', result); // TODO: Remove in major release
+
+        this.$emit('pathChanged', result); // eslint-disable-line
+      }
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      this.polyline = new globalThis.google.maps.Polyline(_objectSpread2({
+        map: this.getMap()
+      }, this._options));
+      this.polyline.addListener('click', function (e) {
+        return _this2.$emit('click', e);
+      });
+      this.polyline.addListener('dblclick', function (e) {
+        return _this2.$emit('double-click', e);
+      });
+      this.polyline.addListener('dragend', function (e) {
+        return _this2.$emit('drag-end', e);
+      });
+      this.polyline.addListener('dragstart', function (e) {
+        return _this2.$emit('drag-start', e);
+      });
+      this.polyline.addListener('rightclick', function (e) {
+        return _this2.$emit('right-click', e);
+      }); // NOTE: path events insert_at and set_at only fired once so mouse up was more reliable (but mouse up doesn't trigger for remove event)
+
+      this.polyline.addListener('mouseup', function () {
+        return _this2.changedPath();
+      });
+      this.polyline.getPath().addListener('remove_at', function () {
+        return _this2.changedPath();
+      }); // TODO: Remove in major release
+
+      this.polyline.addListener('dblclick', function (e) {
+        return _this2.$emit('doubleClick', e);
+      }); // eslint-disable-line
+
+      this.polyline.addListener('dragend', function (e) {
+        return _this2.$emit('dragEnd', e);
+      }); // eslint-disable-line
+
+      this.polyline.addListener('dragstart', function (e) {
+        return _this2.$emit('dragStart', e);
+      }); // eslint-disable-line
+
+      this.polyline.addListener('rightclick', function (e) {
+        return _this2.$emit('rightClick', e);
+      }); // eslint-disable-line
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.polyline) this.polyline.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsPolyline;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$3 = _applyDecoratedDescriptor(_class2$3.prototype, "getMap", [_dec$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$3 = _applyDecoratedDescriptor(_class2$3.prototype, "options", [_dec2$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$3 = _applyDecoratedDescriptor(_class2$3.prototype, "clickable", [_dec3$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$3 = _applyDecoratedDescriptor(_class2$3.prototype, "draggable", [_dec4$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5$3 = _applyDecoratedDescriptor(_class2$3.prototype, "editable", [_dec5$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor6$2 = _applyDecoratedDescriptor(_class2$3.prototype, "icons", [_dec6$3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor7$2 = _applyDecoratedDescriptor(_class2$3.prototype, "geodesic", [_dec7$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor8$2 = _applyDecoratedDescriptor(_class2$3.prototype, "path", [_dec8$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor9$1 = _applyDecoratedDescriptor(_class2$3.prototype, "strokeColor", [_dec9$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor10$1 = _applyDecoratedDescriptor(_class2$3.prototype, "strokeOpacity", [_dec10$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor11$1 = _applyDecoratedDescriptor(_class2$3.prototype, "strokeWeight", [_dec11$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor12$1 = _applyDecoratedDescriptor(_class2$3.prototype, "visible", [_dec12$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor13$1 = _applyDecoratedDescriptor(_class2$3.prototype, "zIndex", [_dec13$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$3.prototype, "_optionsChanged", [_dec14$1], Object.getOwnPropertyDescriptor(_class2$3.prototype, "_optionsChanged"), _class2$3.prototype)), _class2$3)) || _class$3);
+
+var _dec$2, _dec2$2, _dec3$2, _dec4$2, _dec5$2, _dec6$2, _class$2, _class2$2, _descriptor$2, _descriptor2$2, _descriptor3$2, _descriptor4$2, _descriptor5$2;
+var GmapsPopup = (_dec$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec3$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: '#EEEEEE'
+}), _dec4$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: '200px'
+}), _dec5$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: '60px'
+}), _dec6$2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('position', {
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$2 = (_class2$2 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsPopup, _Vue);
+
+  var _super = _createSuper(GmapsPopup);
+
+  function GmapsPopup() {
+    var _this;
+
+    _classCallCheck(this, GmapsPopup);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsPopup');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "position", _descriptor2$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "background", _descriptor3$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "width", _descriptor4$2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "height", _descriptor5$2, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "popup", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsPopup, [{
+    key: "positionChanged",
+    value: function positionChanged(newVal) {
+      if (this.popup) this.popup.setPosition(newVal);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var Popup = createPopupClass();
+      this.popup = new Popup(this.position, this.$el);
+      if (this.popup) this.popup.setMap(this.getMap());
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.popup) this.popup.setMap(null);
+    }
+  }]);
+
+  return GmapsPopup;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$2 = _applyDecoratedDescriptor(_class2$2.prototype, "getMap", [_dec$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$2 = _applyDecoratedDescriptor(_class2$2.prototype, "position", [_dec2$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$2 = _applyDecoratedDescriptor(_class2$2.prototype, "background", [_dec3$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$2 = _applyDecoratedDescriptor(_class2$2.prototype, "width", [_dec4$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5$2 = _applyDecoratedDescriptor(_class2$2.prototype, "height", [_dec5$2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$2.prototype, "positionChanged", [_dec6$2], Object.getOwnPropertyDescriptor(_class2$2.prototype, "positionChanged"), _class2$2.prototype)), _class2$2)) || _class$2);
+
+/* script */
+var __vue_script__ = GmapsPopup;
+/* template */
+
+var __vue_render__ = function __vue_render__() {
+  var _vm = this;
+
+  var _h = _vm.$createElement;
+
+  var _c = _vm._self._c || _h;
+
+  return _c('div', {
+    staticClass: "gmaps-popup-container",
+    on: {
+      "click": function click($event) {
+        $event.preventDefault();
+        return _vm.$emit('click');
+      }
+    }
+  }, [_c('div', {
+    staticClass: "gmaps-popup-bubble-anchor",
+    style: "color: " + _vm.background + ";"
+  }, [_c('div', {
+    staticClass: "gmaps-popup-bubble",
+    style: {
+      background: _vm.background,
+      maxWidth: _vm.width,
+      maxHeight: _vm.height
+    }
+  }, [_vm._t("default")], 2)])]);
+};
+
+var __vue_staticRenderFns__ = [];
+/* style */
+
+var __vue_inject_styles__ = function __vue_inject_styles__(inject) {
+  if (!inject) return;
+  inject("data-v-5627b1f1_0", {
+    source: ".gmaps-popup-bubble{border-radius:5px;box-shadow:0 3px 10px 1px rgba(0,0,0,.5);color:#444;cursor:pointer;font-family:sans-serif;left:0;overflow-y:auto;padding:5px;position:absolute;top:0;transform:translate(-50%,-100%)}.gmaps-popup-bubble-anchor{bottom:8px;left:0;position:absolute;width:100%}.gmaps-popup-bubble-anchor::after{border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid;border-top-color:inherit!important;content:\"\";height:0;left:0;position:absolute;top:-1px;transform:translate(-50%,0);width:0;cursor:pointer}.gmaps-popup-container{cursor:auto;height:0;position:absolute;width:100%}",
+    map: undefined,
+    media: undefined
+  });
+};
+/* scoped */
+
+
+var __vue_scope_id__ = undefined;
+/* module identifier */
+
+var __vue_module_identifier__ = undefined;
+/* functional template */
+
+var __vue_is_functional_template__ = false;
+/* style inject SSR */
+
+/* style inject shadow dom */
+
+var __vue_component__ = /*#__PURE__*/normalizeComponent({
+  render: __vue_render__,
+  staticRenderFns: __vue_staticRenderFns__
+}, __vue_inject_styles__, __vue_script__, __vue_scope_id__, __vue_is_functional_template__, __vue_module_identifier__, false, createInjector, undefined, undefined);
+
+var _dec$1, _dec2$1, _dec3$1, _dec4$1, _dec5$1, _dec6$1, _dec7$1, _dec8$1, _dec9$1, _class$1, _class2$1, _descriptor$1, _descriptor2$1, _descriptor3$1, _descriptor4$1, _descriptor5$1, _descriptor6$1, _descriptor7$1, _descriptor8$1;
+var GmapsHeatmap = (_dec$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec3$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec4$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.6
+}), _dec5$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec6$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec7$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec8$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: undefined
+}), _dec9$1 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('_options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class$1 = (_class2$1 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsHeatmap, _Vue);
+
+  var _super = _createSuper(GmapsHeatmap);
+
+  function GmapsHeatmap() {
+    var _this;
+
+    _classCallCheck(this, GmapsHeatmap);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsHeatmap');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "dissipating", _descriptor2$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "maxIntensity", _descriptor3$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "opacity", _descriptor4$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "radius", _descriptor5$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "items", _descriptor6$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "colors", _descriptor7$1, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "weightProp", _descriptor8$1, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "heatmap", void 0);
+
+    return _this;
+  }
+
+  _createClass(GmapsHeatmap, [{
+    key: "getData",
+    value: function getData() {
+      var _this2 = this;
+
+      return this.items.map(function (e) {
+        if (_this2.weightProp) return {
+          location: new globalThis.google.maps.LatLng(e.lat, e.lng),
+          // TODO: No idea how to remove this any
+          weight: e[_this2.weightProp]
+        };
+        return new globalThis.google.maps.LatLng(e.lat, e.lng);
+      });
+    }
+  }, {
+    key: "updateData",
+    value: function updateData() {
+      if (this.heatmap) this.heatmap.setData(this.getData());
+    }
+  }, {
+    key: "_options",
+    get: function get() {
+      var options = {
+        data: this.getData()
+      };
+      if (this.colors) options.gradient = this.colors;
+      if (this.dissipating) options.dissipating = this.dissipating;
+      if (this.maxIntensity) options.maxIntensity = +this.maxIntensity;
+      if (this.opacity) options.opacity = +this.opacity;
+      if (this.radius) options.radius = +this.radius;
+      return options;
+    }
+  }, {
+    key: "_optionsChanged",
+    value: function _optionsChanged(newVal) {
+      if (this.heatmap) this.heatmap.setOptions(newVal);
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      this.heatmap = new globalThis.google.maps.visualization.HeatmapLayer(_objectSpread2({
+        map: this.getMap()
+      }, this._options));
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.heatmap) this.heatmap.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsHeatmap;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor$1 = _applyDecoratedDescriptor(_class2$1.prototype, "getMap", [_dec$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2$1 = _applyDecoratedDescriptor(_class2$1.prototype, "dissipating", [_dec2$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3$1 = _applyDecoratedDescriptor(_class2$1.prototype, "maxIntensity", [_dec3$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4$1 = _applyDecoratedDescriptor(_class2$1.prototype, "opacity", [_dec4$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5$1 = _applyDecoratedDescriptor(_class2$1.prototype, "radius", [_dec5$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor6$1 = _applyDecoratedDescriptor(_class2$1.prototype, "items", [_dec6$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor7$1 = _applyDecoratedDescriptor(_class2$1.prototype, "colors", [_dec7$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor8$1 = _applyDecoratedDescriptor(_class2$1.prototype, "weightProp", [_dec8$1], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2$1.prototype, "_optionsChanged", [_dec9$1], Object.getOwnPropertyDescriptor(_class2$1.prototype, "_optionsChanged"), _class2$1.prototype)), _class2$1)) || _class$1);
+
+var _dec, _dec2, _dec3, _dec4, _dec5, _dec6, _dec7, _dec8, _dec9, _dec10, _dec11, _dec12, _dec13, _dec14, _dec15, _class, _class2, _descriptor, _descriptor2, _descriptor3, _descriptor4, _descriptor5, _descriptor6, _descriptor7, _descriptor8, _descriptor9, _descriptor10, _descriptor11, _descriptor12, _descriptor13, _descriptor14;
+var GmapsRectangle = (_dec = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Inject)('getMap'), _dec2 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.001
+}), _dec3 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  required: true
+}), _dec4 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec5 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec6 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: false
+}), _dec7 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec8 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0.3
+}), _dec9 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 'black'
+}), _dec10 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 1.0
+}), _dec11 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec12 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 3
+}), _dec13 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: true
+}), _dec14 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Prop)({
+  default: 0
+}), _dec15 = (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Watch)('_options', {
+  immediate: true,
+  deep: true
+}), (0,vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Component)(_class = (_class2 = /*#__PURE__*/function (_Vue) {
+  _inherits(GmapsRectangle, _Vue);
+
+  var _super = _createSuper(GmapsRectangle);
+
+  function GmapsRectangle() {
+    var _this;
+
+    _classCallCheck(this, GmapsRectangle);
+
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+
+    _this = _super.call.apply(_super, [this].concat(args));
+
+    _defineProperty(_assertThisInitialized(_this), "name", 'gmapsRectangle');
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "getMap", _descriptor, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "sensitivity", _descriptor2, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "bounds", _descriptor3, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "clickable", _descriptor4, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "draggable", _descriptor5, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "editable", _descriptor6, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "fillColor", _descriptor7, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "fillOpacity", _descriptor8, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeColor", _descriptor9, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeOpacity", _descriptor10, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokePosition", _descriptor11, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "strokeWeight", _descriptor12, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "visible", _descriptor13, _assertThisInitialized(_this));
+
+    _initializerDefineProperty(_assertThisInitialized(_this), "zIndex", _descriptor14, _assertThisInitialized(_this));
+
+    _defineProperty(_assertThisInitialized(_this), "rectangle", void 0);
+
+    _defineProperty(_assertThisInitialized(_this), "tempBounds", _this.bounds);
+
+    return _this;
+  }
+
+  _createClass(GmapsRectangle, [{
+    key: "_options",
+    get: function get() {
+      return {
+        bounds: this.bounds,
+        clickable: this.clickable,
+        draggable: this.draggable,
+        editable: this.editable,
+        fillColor: this.fillColor,
+        fillOpacity: +this.fillOpacity,
+        strokeColor: this.strokeColor,
+        strokeOpacity: +this.strokeOpacity,
+        strokePosition: +this.strokePosition,
+        strokeWeight: +this.strokeWeight,
+        visible: this.visible,
+        zIndex: +this.zIndex
+      };
+    }
+  }, {
+    key: "_optionsChanged",
+    value: function _optionsChanged(newVal) {
+      if (this.rectangle) this.rectangle.setOptions(newVal);
+    }
+  }, {
+    key: "changedBounds",
+    value: function changedBounds() {
+      if (!this.rectangle) return; // This is fired when the component is replaced and may not have a tempBounds
+
+      var oldBounds = this.tempBounds || {
+        north: -1,
+        south: -1,
+        east: -1,
+        west: -1
+      };
+      var newBounds = this.rectangle.getBounds().toJSON();
+
+      if (Math.abs(newBounds.north - oldBounds.north) > this.sensitivity || Math.abs(newBounds.south - oldBounds.south) > this.sensitivity || Math.abs(newBounds.east - oldBounds.east) > this.sensitivity || Math.abs(newBounds.west - oldBounds.west) > this.sensitivity) {
+        this.tempBounds = newBounds;
+        this.$emit('bounds-changed', newBounds); // TODO: Remove in major release
+
+        this.$emit('boundsChanged', newBounds); // eslint-disable-line
+      }
+    }
+  }, {
+    key: "mounted",
+    value: function mounted() {
+      var _this2 = this;
+
+      this.rectangle = new globalThis.google.maps.Rectangle(_objectSpread2({
+        map: this.getMap()
+      }, this._options));
+      this.rectangle.addListener('bounds_changed', function () {
+        return _this2.changedBounds();
+      });
+      this.rectangle.addListener('click', function (e) {
+        return _this2.$emit('click', e);
+      });
+      this.rectangle.addListener('dblclick', function (e) {
+        return _this2.$emit('double-click', e);
+      });
+      this.rectangle.addListener('drag', function (e) {
+        return _this2.$emit('drag', e.latLng ? e.latLng.toJSON() : null);
+      });
+      this.rectangle.addListener('dragend', function (e) {
+        return _this2.$emit('drag-end', e.latLng ? e.latLng.toJSON() : null);
+      });
+      this.rectangle.addListener('dragstart', function (e) {
+        return _this2.$emit('drag-start', e.latLng ? e.latLng.toJSON() : null);
+      });
+      this.rectangle.addListener('mouseover', function (e) {
+        return _this2.$emit('mouseover', e);
+      });
+      this.rectangle.addListener('rightclick', function (e) {
+        return _this2.$emit('right-click', e);
+      }); // TODO: Remove in major release
+
+      this.rectangle.addListener('dblclick', function (e) {
+        return _this2.$emit('doubleClick', e);
+      }); // eslint-disable-line
+
+      this.rectangle.addListener('dragend', function (e) {
+        return _this2.$emit('dragEnd', e.latLng ? e.latLng.toJSON() : null);
+      }); // eslint-disable-line
+
+      this.rectangle.addListener('dragstart', function (e) {
+        return _this2.$emit('dragStart', e.latLng ? e.latLng.toJSON() : null);
+      }); // eslint-disable-line
+
+      this.rectangle.addListener('rightclick', function (e) {
+        return _this2.$emit('rightClick', e);
+      }); // eslint-disable-line
+    }
+  }, {
+    key: "beforeDestroy",
+    value: function beforeDestroy() {
+      if (this.rectangle) this.rectangle.setMap(null);
+    }
+  }, {
+    key: "render",
+    value: function render() {
+      return null;
+    }
+  }]);
+
+  return GmapsRectangle;
+}(vue_property_decorator__WEBPACK_IMPORTED_MODULE_0__.Vue), (_descriptor = _applyDecoratedDescriptor(_class2.prototype, "getMap", [_dec], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor2 = _applyDecoratedDescriptor(_class2.prototype, "sensitivity", [_dec2], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor3 = _applyDecoratedDescriptor(_class2.prototype, "bounds", [_dec3], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor4 = _applyDecoratedDescriptor(_class2.prototype, "clickable", [_dec4], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor5 = _applyDecoratedDescriptor(_class2.prototype, "draggable", [_dec5], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor6 = _applyDecoratedDescriptor(_class2.prototype, "editable", [_dec6], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor7 = _applyDecoratedDescriptor(_class2.prototype, "fillColor", [_dec7], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor8 = _applyDecoratedDescriptor(_class2.prototype, "fillOpacity", [_dec8], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor9 = _applyDecoratedDescriptor(_class2.prototype, "strokeColor", [_dec9], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor10 = _applyDecoratedDescriptor(_class2.prototype, "strokeOpacity", [_dec10], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor11 = _applyDecoratedDescriptor(_class2.prototype, "strokePosition", [_dec11], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor12 = _applyDecoratedDescriptor(_class2.prototype, "strokeWeight", [_dec12], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor13 = _applyDecoratedDescriptor(_class2.prototype, "visible", [_dec13], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _descriptor14 = _applyDecoratedDescriptor(_class2.prototype, "zIndex", [_dec14], {
+  configurable: true,
+  enumerable: true,
+  writable: true,
+  initializer: null
+}), _applyDecoratedDescriptor(_class2.prototype, "_optionsChanged", [_dec15], Object.getOwnPropertyDescriptor(_class2.prototype, "_optionsChanged"), _class2.prototype)), _class2)) || _class);
+
+// install function executed by Vue.use()
+var install = function installX5Gmaps(Vue, options) {
+  if (!options) throw new Error("x5-gmaps :: (Google API) 'key' is required for plugin install.");
+  if (typeof options === 'string') init({
+    key: options,
+    libraries: []
+  });else init(options);
+
+  Vue.prototype.$GMaps = function () {
+    return gmaps;
+  };
+};
+
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (install);
+
 
 
 /***/ })

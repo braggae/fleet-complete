@@ -1,9 +1,9 @@
 <template>
-  <table class="table table-bordered">
+  <table class="table table-bordered" id="vehicle-table">
     <thead>
       <tr>
         <th>Name</th>
-<!--        <th>Speed</th> TODO: ask about speed calculation-->
+<!--        <th>Speed</th> TODO: ask about speed calculation, it's always 0 in the response-->
         <th>Last Update</th>
       </tr>
     </thead>

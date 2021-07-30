@@ -1,15 +1,16 @@
 const { BadRequest, Unauthorized, InternalServerError } = require('http-errors');
 const { ApiClient }  = require('../../api-client')
+const { validateApiToken } = require('../../utils');
 
-async function vehiclesHandler(req, res, next) {
+async function vehiclesHandler(req, res) {
     const apiToken = req.headers['x-api-token'];
     if (!apiToken) {
         res.status(400).send((new BadRequest('Missing api token')));
-        return new BadRequest('Missing api token');
+        return;
     }
 
     const apiClient = new ApiClient({
-                                        baseUrl: 'https://app.ecofleet.com/seeme', //TODO: pull from config
+                                        baseUrl: process.env.BASE_API_URL,
                                         apiToken,
                                     });
     let response;
