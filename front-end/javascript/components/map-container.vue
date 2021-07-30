@@ -4,11 +4,12 @@
         v-for="vehicle in vehicleList"
         :key="vehicle.objectId"
         :position="{ lat: vehicle.latitude, lng: vehicle.longitude }"/>
+    <gmaps-polyline :path="vehiclePath" />
   </gmaps-map>
 </template>
 
 <script>
-import { gmapsMap, gmapsMarker } from 'x5-gmaps';
+import { gmapsMap, gmapsMarker, gmapsPolyline } from 'x5-gmaps';
 
 const DEFAULT_CENTER = { lat: 58.406288, lng: 26.741240 };
 const INITIAL_ZOOM = 10;
@@ -16,9 +17,15 @@ const SELECTED_VEHICLE_ZOOM = 18;
 
 export default {
   name: "map-container",
+  components: {
+    gmapsMap,
+    gmapsMarker,
+    gmapsPolyline,
+  },
   props: {
     vehicleList: Array,
     activeVehicle: Object,
+    vehiclePath: { type: Array, default: [], }
   },
   data() {
     return {
@@ -34,11 +41,6 @@ export default {
       this.mapOptions.center = this.getMapCenter(newVal);
       this.mapOptions.zoom = SELECTED_VEHICLE_ZOOM;
     },
-  },
-  computed: {},
-  components: {
-    gmapsMap,
-    gmapsMarker,
   },
   methods: {
     getMapCenter(vehicle = {}) {

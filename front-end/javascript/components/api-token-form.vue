@@ -17,7 +17,7 @@
           v-bind:class="{ 'is-invalid': isInvalid }"
           required
       >
-      <input type="submit" class="btn btn-primary" value="GO">
+      <submit-button :is-loading="isLoading"></submit-button>
       <div class="invalid-feedback">
         {{ this.error }}
       </div>
@@ -26,17 +26,25 @@
 </template>
 
 <script>
+import submitButton from './submit-button';
+
 export default {
   name: "api-token-form",
+  components: {
+    submitButton,
+  },
   data() {
     return {
       token: null,
       error: null,
       isInvalid: false,
+      isLoading: false,
     }
   },
   methods: {
     async onSubmit() {
+      if (this.isLoading) return;
+
       this.isInvalid = false;
       this.error     = null;
 
@@ -46,7 +54,9 @@ export default {
         return;
       }
 
-      const res         = await this.fetchData();
+      this.isLoading = true;
+      const res      = await this.fetchData();
+      this.isLoading = false;
       switch (res.status) {
         case 200:
           this.$emit('vehicle-list-update', await res.json(), this.token);
