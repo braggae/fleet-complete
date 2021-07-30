@@ -5,6 +5,7 @@ const {
       }                    = require('./helpers')
 const mockLastDataResponse = Object.freeze(require('./mocks/mock-response.json'));
 const mockRawDataResponse = Object.freeze(require('./mocks/mock-raw-data-response.json'));
+const mockRawDataResponseWithDelta = Object.freeze(require('./mocks/mock-raw-data-response-with-delta.json'));
 
 describe('mapLastDataResponse()', function () {
     it('should map response', function () {
@@ -23,7 +24,7 @@ describe('mapLastDataResponse()', function () {
     });
 });
 
-describe('validateConstructorOptions()', function () {
+describe('mapRawDataResponse()', function () {
     it('should map response', function () {
         const mapped = mapRawDataResponse(mockRawDataResponse);
 
@@ -34,6 +35,20 @@ describe('validateConstructorOptions()', function () {
             latitude: 58.35176,
             longitude: 26.738573,
             distance: 119014.623,
+            direction: 272.8,
+        });
+    });
+
+    it('should map response with DeltaDistance', function () {
+        const mapped = mapRawDataResponse(mockRawDataResponseWithDelta);
+
+        assert.strictEqual(mapped.length, 31);
+
+        assert.deepStrictEqual(mapped[30], {
+            timestamp: "2021-07-29 07:28:50+0300",
+            latitude: 58.34303,
+            longitude: 26.739778,
+            distance: 1.1379999999999997,
             direction: 272.8,
         });
     });

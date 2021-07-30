@@ -38,26 +38,27 @@ function mapLastDataItem(data) {
 
 function mapLastDataResponse(data) {
     const mapped = [];
-    for (let o of data.response) {
-        mapped.push(mapLastDataItem(o));
+    for (let item of data.response) {
+        mapped.push(mapLastDataItem(item));
     }
     return mapped;
 }
 
-function mapRowDataItem(data) {
-    return {
-        timestamp: data.timestamp,
-        latitude: data.Latitude,
-        longitude: data.Longitude,
-        distance: data.Distance,
-        direction: data.Direction,
-    };
-}
-
 function mapRawDataResponse(data) {
     const mapped = [];
-    for (let o of data.response) {
-        mapped.push(mapRowDataItem(o));
+    let calculatedDistance = 0;
+    for (let item of data.response) {
+        if (item.DeltaDistance) {
+            calculatedDistance += item.DeltaDistance;
+        }
+
+        mapped.push({
+                        timestamp: item.timestamp,
+                        latitude: item.Latitude,
+                        longitude: item.Longitude,
+                        distance: item.Distance ?? calculatedDistance,
+                        direction: parseFloat(item.Direction),
+                    });
     }
     return mapped;
 }
