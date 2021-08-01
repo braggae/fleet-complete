@@ -3,27 +3,42 @@
     <tbody>
     <tr>
       <th>Total distance</th>
-      <td>{{formatDistance(totalDistance)}}</td>
+      <td>{{ formatDistance(totalDistance) }}</td>
     </tr>
     <tr>
       <th>Number of stops</th>
-      <td>{{numberOfStops}}</td>
+      <td>{{ listOfStops.length }}</td>
+    </tr>
+    <tr>
+      <th>Shortest estimated distance</th>
+      <td>
+        <estimated-distance
+            :list-of-stops="listOfStops"
+            :route-origin="routeOrigin"
+        ></estimated-distance>
+      </td>
     </tr>
     </tbody>
   </table>
 </template>
 
 <script>
+import estimatedDistance from './estimated-distance';
+
 export default {
   name: "details-table",
+  components: {
+    estimatedDistance,
+  },
   props: {
-    totalDistance: 0,
-    numberOfStops: 0,
+    totalDistance: { type: Number, default: 0 },
+    listOfStops: Array,
+    routeOrigin: Object,
   },
   methods: {
     formatDistance(distance) {
       return `${Math.ceil(distance)} km`
-    }
+    },
   },
 }
 </script>

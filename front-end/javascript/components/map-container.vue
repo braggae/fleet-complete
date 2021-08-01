@@ -1,7 +1,7 @@
 <template>
   <gmaps-map id="map" v-bind:options="mapOptions">
     <gmaps-marker
-        v-for="vehicle in vehicles"
+        v-for="vehicle in vehicleList"
         :key="vehicle.objectId"
         :position="{ lat: vehicle.latitude, lng: vehicle.longitude }"
     />
@@ -9,8 +9,9 @@
         v-for="(stop, i) in listOfStops"
         :key="i"
         :position="stop"
+        :icon="'http://maps.google.com/mapfiles/ms/micons/red-pushpin.png'"
     />
-    <gmaps-polyline :path="vehiclePath" />
+    <gmaps-polyline :path="vehiclePath" :strokeColor="'aqua'"/>
   </gmaps-map>
 </template>
 
@@ -41,19 +42,17 @@ export default {
         zoom: INITIAL_ZOOM,
         disableDefaultUI: true,
       },
-      vehicles: this.vehicleList,
     }
   },
   watch: {
-    activeVehicle: function (newVal, oldVal) {
-      this.mapOptions.center = this.getMapCenter(newVal);
-      this.mapOptions.zoom = SELECTED_VEHICLE_ZOOM;
+    activeVehicle: function (newVal) {
+      if (!newVal) return;
+      this.updateMapPosition(this.getMapCenter(newVal));
+      this.setMapZoom(SELECTED_VEHICLE_ZOOM);
     },
-    listOfStops: function (newVal) {
-      if (!newVal.length) return;
-
-      this.vehicles = [];
-      this.mapOptions.zoom = INITIAL_ZOOM;
+    vehiclePath: function (newVal) {
+      if (newVal.length === 0) return;
+      this.updateMapPosition(newVal[0]);
     }
   },
   methods: {
@@ -63,6 +62,18 @@ export default {
         lng: vehicle?.longitude ?? DEFAULT_CENTER.lng,
       }
     },
+    /**
+     *
+     * @param {Object} pos
+     * @param {Number} pos.lat
+     * @param {Number} pos.lng
+     */
+    updateMapPosition(pos) {
+      this.mapOptions.center = pos;
+    },
+    setMapZoom(zoom) {
+      this.mapOptions.zoom = zoom;
+    }
   },
 }
 </script>

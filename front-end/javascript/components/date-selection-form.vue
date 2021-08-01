@@ -54,6 +54,16 @@ export default {
       isLoading: false,
     };
   },
+  mounted() {
+    if (sessionStorage.date) {
+      this.date = sessionStorage.date;
+    }
+  },
+  watch: {
+    date(newDate) {
+      sessionStorage.date = newDate;
+    }
+  },
   methods: {
     async onSubmit() {
       if (this.isLoading) return;
@@ -73,10 +83,54 @@ export default {
       }
 
       this.isLoading = false;
+      this.$emit('vehicle-route-update', res);
+    },
+    canDisplayForm() {
+      return this.apiToken && this.activeVehicle?.objectId;
+    },
+    async fetchData() {
+      const localData = this.fetchDataLocal();
+      if (localData) {
+        return JSON.parse(localData);
+      }
+
+      const remoteData = await this.fetchDataRemote();
+      this.storeDataLocally(remoteData);
+      return remoteData;
+    },
+    storeDataLocally(data) {
+      if (this.isTodaySelected()) return;
+      sessionStorage.setItem(this.buildStorageKey(), JSON.stringify(data));
+    },
+    buildStorageKey() {
+      return `${this.date}-${this.activeVehicle.objectId}`;
+    },
+    isTodaySelected() {
+      const today = new Date();
+      const dd    = String(today.getDate()).padStart(2, '0');
+      const mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+      const yyyy = today.getFullYear();
+
+      return this.date === `${yyyy}-${mm}-${dd}`;
+    },
+    fetchDataLocal() {
+      return sessionStorage.getItem(this.buildStorageKey());
+    },
+    async fetchDataRemote() {
+      const res = await axios.get('vehicle-route-data', {
+        params: {
+          date: this.date,
+          objectId: this.activeVehicle.objectId,
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-token': this.apiToken,
+        },
+      });
+
       switch (res.status) {
         case 200:
-          this.$emit('vehicle-route-update', res.data);
-          break;
+          return res.data;
         case 401:
           this.error     = 'Invalid API token';
           this.isInvalid = true;
@@ -89,21 +143,7 @@ export default {
           this.error     = 'Unknown error';
           this.isInvalid = true;
       }
-    },
-    canDisplayForm() {
-      return this.apiToken && this.activeVehicle?.objectId;
-    },
-    async fetchData() {
-      return axios.get('vehicle-route-data', {
-        params: {
-          date: this.date,
-          objectId: this.activeVehicle.objectId,
-        },
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-token': this.apiToken,
-        },
-      });
+      return {};
     },
   },
 }
