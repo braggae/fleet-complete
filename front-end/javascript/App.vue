@@ -3,7 +3,7 @@
     <api-token-form v-on:vehicle-list-update="onVehicleListUpdate"></api-token-form>
     <hr>
     <div class="row">
-      <div class="col gap-3">
+      <div class="col-xs-12 col-sm-12 col-md-6 gap-3">
         <vehicle-table
             :data="vehicleLatestData"
             v-on:vehicle-selected="onVehicleSelected"
@@ -16,10 +16,11 @@
         <details-table
             v-if="vehiclePath.length"
             :total-distance="totalDistance"
-            :number-of-stops="listOfStops.length"
+            :list-of-stops="listOfStops"
+            :route-origin="routeOrigin"
         ></details-table>
       </div>
-      <div class="col">
+      <div class="col-xs-12 col-sm-12 col-md-6">
         <map-container
             :vehicle-list="vehicleLatestData"
             :active-vehicle="activeVehicle"
@@ -56,6 +57,7 @@ export default {
       vehiclePath: [],
       totalDistance: 0,
       listOfStops: [],
+      routeOrigin: {},
     }
   },
   methods: {
@@ -69,6 +71,7 @@ export default {
     },
     onVehicleRouteUpdate(data) {
       this.resetMapData();
+      this.routeOrigin = {lat: data[0].latitude, lng: data[0].longitude }
       this.totalDistance = data[data.length - 1]?.distance - data[0]?.distance;
       data.forEach(item => {
         this.vehiclePath.push({ lat: item.latitude, lng: item.longitude });
@@ -81,6 +84,7 @@ export default {
       this.vehiclePath = [];
       this.totalDistance = 0;
       this.listOfStops = [];
+      this.routeOrigin = {};
     }
   },
 }

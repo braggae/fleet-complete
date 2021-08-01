@@ -33,6 +33,16 @@ export default {
   components: {
     submitButton,
   },
+  mounted() {
+    if (sessionStorage.apiToken) {
+      this.token = sessionStorage.apiToken;
+    }
+  },
+  watch: {
+    token(newToken) {
+      sessionStorage.apiToken = newToken;
+    }
+  },
   data() {
     return {
       token: null,

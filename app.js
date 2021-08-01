@@ -24,6 +24,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', require('./backend/routes/index'));
 app.use('/vehicles', require('./backend/routes/vehicles'));
 app.use('/vehicle-route-data', require('./backend/routes/vehicle-route-data'));
+app.use('/estimated-distance', require('./backend/routes/estimated-distance'));
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

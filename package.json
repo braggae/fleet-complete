@@ -19,6 +19,7 @@
     "express": "~4.16.1",
     "http-errors": "~1.6.3",
     "morgan": "~1.9.1",
+    "node-distance-matrix": "^1.2.0",
     "verror": "^1.10.0",
     "vue-class-component": "^7.2.6",
     "x5-gmaps": "^0.5.6"

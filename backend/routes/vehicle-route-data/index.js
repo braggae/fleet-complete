@@ -1,4 +1,4 @@
-const router           = require('express').Router();
+const router                       = require('express').Router();
 const { vehiclesRouteDataHandler } = require('./handlers');
 
 router.get('/', vehiclesRouteDataHandler);
