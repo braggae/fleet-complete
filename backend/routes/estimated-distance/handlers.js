@@ -1,6 +1,4 @@
-const distance = require('google-distance-matrix');
 const DistanceMatrix = require('node-distance-matrix');
-distance.key(process.env.MAPS_API_KEY);
 const { buildDestinationsList, extractDistanceValue } = require('./helpers');
 
 async function calculateEstimatedDistance(req, res) {
