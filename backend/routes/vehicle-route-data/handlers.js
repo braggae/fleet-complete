@@ -20,7 +20,6 @@ async function vehiclesRouteDataHandler(req, res) {
                                     });
 
     let response;
-
     try {
         response = await apiClient.getVehicleRawData({
                                                          objectId: req.query.objectId,

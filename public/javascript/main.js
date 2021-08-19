@@ -5141,6 +5141,8 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
 //
 //
 //
+//
+//
 
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = ({
   name: "api-token-form",
@@ -10913,7 +10915,7 @@ __webpack_require__.r(__webpack_exports__);
 
 var ___CSS_LOADER_EXPORT___ = _node_modules_css_loader_dist_runtime_api_js__WEBPACK_IMPORTED_MODULE_0___default()(function(i){return i[1]});
 // Module
-___CSS_LOADER_EXPORT___.push([module.id, "\n#api-key-form[data-v-0fc010f0] {\n  max-width: 500px;\n}\n", ""]);
+___CSS_LOADER_EXPORT___.push([module.id, "\n#api-key-form[data-v-0fc010f0] {\n  max-width: 500px;\n}\n@media only screen and (max-width: 767px) {\n#api-key-form[data-v-0fc010f0] {\n    max-width: 100%;\n}\n}\n", ""]);
 // Exports
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (___CSS_LOADER_EXPORT___);
 
@@ -13512,68 +13514,70 @@ var render = function() {
   var _vm = this
   var _h = _vm.$createElement
   var _c = _vm._self._c || _h
-  return _c(
-    "form",
-    {
-      staticClass: "row g-3",
-      attrs: { id: "api-key-form", novalidate: "" },
-      on: {
-        submit: function($event) {
-          $event.preventDefault()
-          return _vm.onSubmit.apply(null, arguments)
+  return _c("div", { staticClass: "row" }, [
+    _c(
+      "form",
+      {
+        staticClass: "col",
+        attrs: { id: "api-key-form", novalidate: "" },
+        on: {
+          submit: function($event) {
+            $event.preventDefault()
+            return _vm.onSubmit.apply(null, arguments)
+          }
         }
-      }
-    },
-    [
-      _c(
-        "div",
-        { staticClass: "input-group has-validation" },
-        [
-          _c(
-            "label",
-            { staticClass: "input-group-text", attrs: { for: "api-key" } },
-            [_vm._v("API key:")]
-          ),
-          _vm._v(" "),
-          _c("input", {
-            directives: [
-              {
-                name: "model",
-                rawName: "v-model",
-                value: _vm.token,
-                expression: "token"
-              }
-            ],
-            staticClass: "form-control",
-            class: { "is-invalid": _vm.isInvalid },
-            attrs: {
-              type: "text",
-              id: "api-key",
-              name: "api-key",
-              placeholder: "(api key goes here)",
-              required: ""
-            },
-            domProps: { value: _vm.token },
-            on: {
-              input: function($event) {
-                if ($event.target.composing) {
-                  return
+      },
+      [
+        _c(
+          "div",
+          { staticClass: "input-group has-validation" },
+          [
+            _c(
+              "label",
+              { staticClass: "input-group-text", attrs: { for: "api-key" } },
+              [_vm._v("API key:")]
+            ),
+            _vm._v(" "),
+            _c("input", {
+              directives: [
+                {
+                  name: "model",
+                  rawName: "v-model",
+                  value: _vm.token,
+                  expression: "token"
                 }
-                _vm.token = $event.target.value
+              ],
+              staticClass: "form-control",
+              class: { "is-invalid": _vm.isInvalid },
+              attrs: {
+                type: "text",
+                id: "api-key",
+                name: "api-key",
+                placeholder: "(api key goes here)",
+                required: ""
+              },
+              domProps: { value: _vm.token },
+              on: {
+                input: function($event) {
+                  if ($event.target.composing) {
+                    return
+                  }
+                  _vm.token = $event.target.value
+                }
               }
-            }
-          }),
-          _vm._v(" "),
-          _c("submit-button", { attrs: { "is-loading": _vm.isLoading } }),
-          _vm._v(" "),
-          _c("div", { staticClass: "invalid-feedback" }, [
-            _vm._v("\n      " + _vm._s(this.error) + "\n    ")
-          ])
-        ],
-        1
-      )
-    ]
-  )
+            }),
+            _vm._v(" "),
+            _c("submit-button", { attrs: { "is-loading": _vm.isLoading } }),
+            _vm._v(" "),
+            _c("div", { staticClass: "invalid-feedback" }, [
+              _vm._v("\n        " + _vm._s(this.error) + "\n      ")
+            ])
+          ],
+          1
+        )
+      ]
+    )
+  ])
 }
 var staticRenderFns = []
 render._withStripped = true

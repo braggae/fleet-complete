@@ -30,28 +30,41 @@ describe('mapRawDataResponse()', function () {
 
         assert.strictEqual(mapped.length, 4);
 
-        assert.deepStrictEqual(mapped[3], {
-            timestamp: "2019-09-30 03:29:17+0300",
+        assert.deepStrictEqual(mapped[2], {
+            timestamp: "2019-09-30 02:29:17+0300",
             latitude: 58.35176,
             longitude: 26.738573,
             distance: 119014.623,
-            direction: 272.8,
             isStop: false,
         });
+        assert.strictEqual(mapped[0].isStop, true);
+        assert.strictEqual(mapped[3].isStop, true);
     });
 
     it('should map response with DeltaDistance', function () {
         const mapped = mapRawDataResponse(mockRawDataResponseWithDelta);
-
         assert.strictEqual(mapped.length, 31);
 
+        assert.deepStrictEqual(mapped[10], {
+            timestamp: "2021-07-29 07:26:51+0300",
+            latitude: 58.35168,
+            longitude: 26.739157,
+            distance: 0.036000000000000004,
+            isStop: false,
+        });
+        assert.deepStrictEqual(mapped[19], {
+            timestamp: "2021-07-29 07:27:26+0300",
+            latitude: 58.350863,
+            longitude: 26.740793,
+            distance: 0.21700000000000003,
+            isStop: true,
+        });
         assert.deepStrictEqual(mapped[30], {
             timestamp: "2021-07-29 07:28:50+0300",
             latitude: 58.34303,
             longitude: 26.739778,
             distance: 1.1379999999999997,
-            direction: 272.8,
             isStop: true,
         });
     });
-})
+});

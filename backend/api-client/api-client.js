@@ -19,7 +19,7 @@ class ApiClient {
 
         this.httpClient = axios.create({
                                            baseURL: options.baseUrl,
-                                           timeout: 3000,
+                                           timeout: 6000,
                                        });
         this.apiToken   = options.apiToken;
     }

@@ -1,28 +1,30 @@
 <template>
-  <form
-      @submit.prevent="onSubmit"
-      class="row g-3"
-      id="api-key-form"
-      novalidate
-  >
-    <div class="input-group has-validation">
-      <label for="api-key" class="input-group-text">API key:</label>
-      <input
-          type="text"
-          class="form-control"
-          id="api-key"
-          name="api-key"
-          v-model="token"
-          placeholder="(api key goes here)"
-          v-bind:class="{ 'is-invalid': isInvalid }"
-          required
-      >
-      <submit-button :is-loading="isLoading"></submit-button>
-      <div class="invalid-feedback">
-        {{ this.error }}
+  <div class="row">
+    <form
+        @submit.prevent="onSubmit"
+        class="col"
+        id="api-key-form"
+        novalidate
+    >
+      <div class="input-group has-validation">
+        <label for="api-key" class="input-group-text">API key:</label>
+        <input
+            type="text"
+            class="form-control"
+            id="api-key"
+            name="api-key"
+            v-model="token"
+            placeholder="(api key goes here)"
+            v-bind:class="{ 'is-invalid': isInvalid }"
+            required
+        >
+        <submit-button :is-loading="isLoading"></submit-button>
+        <div class="invalid-feedback">
+          {{ this.error }}
+        </div>
       </div>
-    </div>
-  </form>
+    </form>
+  </div>
 </template>
 
 <script>
@@ -41,7 +43,7 @@ export default {
   watch: {
     token(newToken) {
       sessionStorage.apiToken = newToken;
-    }
+    },
   },
   data() {
     return {
@@ -95,5 +97,12 @@ export default {
 <style scoped>
 #api-key-form {
   max-width: 500px;
+}
+
+@media only screen and (max-width: 767px) {
+
+  #api-key-form {
+    max-width: 100%;
+  }
 }
 </style>
