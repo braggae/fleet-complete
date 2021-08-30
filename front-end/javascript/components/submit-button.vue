@@ -11,7 +11,6 @@
 </template>
 
 <script>
-import submitButton from './submit-button';
 export default {
   name: "submit-button",
   props: {
