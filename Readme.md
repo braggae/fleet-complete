@@ -1,4 +1,4 @@
-##Installation
+## Installation
 
 ### Install dependencies
 
@@ -19,13 +19,13 @@ cp .env-example .env
 
 Then open newly created file with the editor of your choice and fill in values for the environment variables
 
-###Build project
+### Build project
 run:
 ```bash
 npm build
 ```
 
-###Run project
+### Run project
 run:
 ```bash
 npm start
